@@ -81,7 +81,7 @@ class DirectCommandListener:
 class CommandHandler:
     """命令处理器类"""
     
-    def __init__(self, server_interface: ServerInterface):
+    def __init__(self, server_interface: ServerInterface, config: Dict[str, Any] = None):
         self.server = server_interface
         self.logger = server_interface.logger
         self.executor = ThreadPoolExecutor(max_workers=2)
@@ -90,6 +90,10 @@ class CommandHandler:
         self.lock = threading.Lock()
         self.max_history = 100
         self.default_timeout = 10.0
+        
+        # 配置
+        self.config = config or {}
+        self.command_tree_max_depth = self.config.get("features", {}).get("command_tree_max_depth", 3)
         
         # 注册服务器输出监听器
         self.server.register_event_listener(MCDRPluginEvents.GENERAL_INFO, self._on_server_output)
@@ -139,43 +143,67 @@ class CommandHandler:
         commands = []
         
         try:
-            # 获取MCDR命令
-            mcdr_commands = [
-                {
-                    "plugin_id": "mcdr",
-                    "plugin_name": "MCDReforged Core",
-                    "command": "!!MCDR status",
-                    "description": "查看MCDR状态",
-                    "type": "builtin_command"
-                },
-                {
-                    "plugin_id": "mcdr",
-                    "plugin_name": "MCDReforged Core",
-                    "command": "!!MCDR plugin list",
-                    "description": "列出所有插件",
-                    "type": "builtin_command"
-                }
-            ]
-            commands.extend(mcdr_commands)
+            # 获取MCDR命令管理器
+            command_manager = self.server._mcdr_server.command_manager
+            # 获取所有根节点
+            root_nodes = command_manager.root_nodes
             
-            # 获取Minecraft命令
-            minecraft_commands = [
-                {
-                    "plugin_id": "minecraft",
-                    "plugin_name": "Minecraft Server",
-                    "command": "/help",
-                    "description": "显示帮助信息",
-                    "type": "minecraft_command"
-                },
-                {
-                    "plugin_id": "minecraft",
-                    "plugin_name": "Minecraft Server",
-                    "command": "/list",
-                    "description": "列出在线玩家",
-                    "type": "minecraft_command"
-                }
-            ]
-            commands.extend(minecraft_commands)
+            # 遍历所有根命令
+            for literal, holders in root_nodes.items():
+                # 遍历根命令的所有注册指令
+                for holder in holders:
+                    holder_plugin_id = holder.plugin.get_id()
+                    
+                    # 如果指定了插件ID，则只返回该插件的命令
+                    if plugin_id and holder_plugin_id != plugin_id:
+                        continue
+                    
+                    # 获取命令节点
+                    node = holder.node
+                    
+                    # 解析命令树，使用配置的最大深度
+                    self._parse_command_node(commands, holder_plugin_id, literal, node, self.command_tree_max_depth)
+            
+            # 如果没有找到命令，可能是因为指定的插件ID不存在
+            if plugin_id and not commands:
+                # 添加一个基础的MCDR命令作为备选
+                mcdr_commands = [
+                    {
+                        "plugin_id": "mcdr",
+                        "plugin_name": "MCDReforged Core",
+                        "command": "!!MCDR status",
+                        "description": "查看MCDR状态",
+                        "type": "builtin_command"
+                    },
+                    {
+                        "plugin_id": "mcdr",
+                        "plugin_name": "MCDReforged Core",
+                        "command": "!!MCDR plugin list",
+                        "description": "列出所有插件",
+                        "type": "builtin_command"
+                    }
+                ]
+                commands.extend(mcdr_commands)
+            
+            # 如果没有指定插件ID，添加一些Minecraft命令
+            if not plugin_id:
+                minecraft_commands = [
+                    {
+                        "plugin_id": "minecraft",
+                        "plugin_name": "Minecraft Server",
+                        "command": "/help",
+                        "description": "显示帮助信息",
+                        "type": "minecraft_command"
+                    },
+                    {
+                        "plugin_id": "minecraft",
+                        "plugin_name": "Minecraft Server",
+                        "command": "/list",
+                        "description": "列出在线玩家",
+                        "type": "minecraft_command"
+                    }
+                ]
+                commands.extend(minecraft_commands)
             
             return {
                 "success": True,
@@ -191,6 +219,60 @@ class CommandHandler:
                 "error": str(e),
                 "commands": []
             }
+    
+    def _parse_command_node(self, commands: List[Dict[str, Any]], plugin_id: str, prefix: str, node, max_depth: int = 3, current_depth: int = 0):
+        """递归解析命令节点"""
+        # 避免过深的递归
+        if current_depth > max_depth:
+            return
+        
+        # 获取插件名称
+        plugin_name = "Unknown Plugin"
+        try:
+            all_plugins = self.server.get_plugin_list()
+            for plugin_info in all_plugins:
+                if plugin_info.id == plugin_id:
+                    plugin_name = plugin_info.name
+                    break
+        except Exception:
+            pass
+        
+        # 判断节点类型
+        from mcdreforged.command.builder.nodes.literal import Literal
+        
+        # 如果是字面量节点，添加到命令列表
+        if isinstance(node, Literal):
+            for literal in node.literals:
+                command_path = f"{prefix} {literal}" if prefix else literal
+                
+                # 检查是否有回调函数（表示这是一个可执行命令）
+                has_callback = hasattr(node, '_callback') and node._callback is not None
+                
+                if has_callback:
+                    # 获取命令描述
+                    description = ""
+                    if hasattr(node, 'get_description'):
+                        try:
+                            description = node.get_description() or ""
+                        except Exception:
+                            pass
+                    
+                    # 添加到命令列表
+                    commands.append({
+                        "plugin_id": plugin_id,
+                        "plugin_name": plugin_name,
+                        "command": command_path,
+                        "description": description,
+                        "type": "mcdr_command" if command_path.startswith("!!") else "plugin_command"
+                    })
+                
+                # 递归处理子节点
+                for child in node.get_children():
+                    self._parse_command_node(commands, plugin_id, command_path, child, max_depth, current_depth + 1)
+        else:
+            # 对于非字面量节点（如参数节点），直接处理其子节点
+            for child in node.get_children():
+                self._parse_command_node(commands, plugin_id, prefix, child, max_depth, current_depth + 1)
     
     async def execute_command(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """执行命令并返回响应"""

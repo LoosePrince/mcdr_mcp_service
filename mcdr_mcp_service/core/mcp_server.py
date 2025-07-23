@@ -246,17 +246,38 @@ class MCPServer:
                             "description": "指定插件ID以获取特定插件的命令（可选）"
                         }
                     }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "total_commands": {"type": "integer"},
+                        "commands": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "plugin_id": {"type": "string"},
+                                    "plugin_name": {"type": "string"},
+                                    "command": {"type": "string"},
+                                    "description": {"type": "string"},
+                                    "type": {"type": "string"}
+                                }
+                            }
+                        },
+                        "timestamp": {"type": "integer"}
+                    }
                 }
             },
             {
                 "name": "execute_command",
-                "description": "执行MCDR命令",
+                "description": "执行MCDR命令或Minecraft服务器命令，并捕获真实的命令响应",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "command": {
                             "type": "string",
-                            "description": "要执行的命令"
+                            "description": "要执行的命令，支持MCDR命令(!!开头)或Minecraft命令(可带/前缀)"
                         },
                         "source_type": {
                             "type": "string",
@@ -266,6 +287,20 @@ class MCPServer:
                         }
                     },
                     "required": ["command"]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "command": {"type": "string"},
+                        "command_id": {"type": "string"},
+                        "output": {"type": "string"},
+                        "responses": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "timestamp": {"type": "integer"}
+                    }
                 }
             },
             {
@@ -278,6 +313,24 @@ class MCPServer:
                             "type": "boolean",
                             "default": True,
                             "description": "是否包含在线玩家信息"
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "timestamp": {"type": "integer"},
+                        "mcdr_status": {"type": "string"},
+                        "mcdr_status_detail": {"type": "string"},
+                        "server_running": {"type": "boolean"},
+                        "server_startup": {"type": "boolean"},
+                        "plugin_list_detail": {"type": "string"},
+                        "players": {
+                            "type": "object",
+                            "properties": {
+                                "list_command_result": {"type": "string"}
+                            }
                         }
                     }
                 }

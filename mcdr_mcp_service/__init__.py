@@ -145,7 +145,7 @@ def start_mcp_server(server: PluginServerInterface, config: Dict[str, Any]):
         stop_server_event = threading.Event()
         
         # 创建命令处理器
-        command_handler = CommandHandler(server)
+        command_handler = CommandHandler(server, config)
         
         # 创建MCP服务器实例
         mcp_server_instance = MCPServer(server, command_handler, config)

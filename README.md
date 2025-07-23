@@ -129,13 +129,45 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
+**带参数示例：**
+```json
+{
+  "name": "get_command_tree",
+  "arguments": {
+    "plugin_id": "mcdr_mcp_service"
+  }
+}
+```
+
+**响应格式：**
+```json
+{
+  "success": true,
+  "total_commands": 15,
+  "commands": [
+    {
+      "plugin_id": "mcdr",
+      "plugin_name": "MCDReforged Core",
+      "command": "!!MCDR status",
+      "description": "查看MCDR状态",
+      "type": "builtin_command"
+    },
+    // 更多命令...
+  ],
+  "timestamp": 1753261523
+}
+```
+
 ### 2. execute_command
 执行MCDR命令或Minecraft服务器命令，并捕获真实的命令响应
 
-
 **参数：**
-- `command` (必需): 要执行的命令
-- `source_type` (可选): 命令来源类型 ("console" 或 "player")
+- `command` (必需): 要执行的命令，支持以下格式：
+  - MCDR命令：以`!!`开头，如`!!MCDR status`
+  - Minecraft命令：可以带或不带`/`前缀，如`/list`或`list`
+- `source_type` (可选): 命令来源类型，可选值：
+  - `"console"` (默认): 以控制台身份执行
+  - `"player"`: 以玩家身份执行
 
 **示例：**
 ```json
@@ -148,13 +180,24 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
+**Minecraft命令示例：**
+```json
+{
+  "name": "execute_command", 
+  "arguments": {
+    "command": "/list"
+  }
+}
+```
+
 **响应格式：**
 ```json
 {
   "success": true,
   "command": "!!MCDR status",
+  "command_id": "cmd_1753261523_1234",
   "output": "MCDR 服务器状态信息的完整响应内容...",
-  "response_type": "captured",
+  "responses": ["第一行响应", "第二行响应", "..."],
   "timestamp": 1753261523
 }
 ```
@@ -163,7 +206,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 获取MCDR服务器状态信息
 
 **参数：**
-- `include_players` (可选): 是否包含在线玩家信息
+- `include_players` (可选): 是否包含在线玩家信息，默认为`true`
 
 **示例：**
 ```json
@@ -175,10 +218,86 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
+**响应格式：**
+```json
+{
+  "success": true,
+  "timestamp": 1753261523,
+  "mcdr_status": "running",
+  "mcdr_status_detail": "MCDR 版本: 2.x.x\n...",
+  "server_running": true,
+  "server_startup": true,
+  "plugin_list_detail": "已加载的插件: xxx, xxx, ...",
+  "players": {
+    "list_command_result": "当前有 3 名玩家在线: player1, player2, player3"
+  }
+}
+```
+
 ## 配置文件
 
 插件会在 `config/mcdr_mcp_service/config.json` 创建配置文件。
 
+### 主要配置选项
+
+```json
+{
+  "mcp_server": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8765,
+    "max_connections": 5
+  },
+  "security": {
+    "require_authentication": false,
+    "api_key": "",
+    "allowed_ips": [
+      "127.0.0.1",
+      "::1"
+    ],
+    "rate_limit": {
+      "requests_per_minute": 60,
+      "commands_per_minute": 30
+    }
+  },
+  "features": {
+    "command_execution": true,
+    "server_status": true,
+    "command_tree": true,
+    "command_tree_max_depth": 3
+  },
+  "dangerous_commands": [
+    "stop",
+    "restart",
+    "reload",
+    "exit",
+    "!!MCDR stop"
+  ]
+}
+```
+
+### 配置项说明
+
+#### MCP服务器配置
+- `enabled`: 是否启用MCP服务器
+- `host`: 服务器监听地址
+- `port`: 服务器监听端口
+- `max_connections`: 最大并发连接数
+
+#### 安全配置
+- `require_authentication`: 是否需要API密钥认证
+- `api_key`: API密钥（如果启用认证）
+- `allowed_ips`: 允许连接的IP白名单
+- `rate_limit`: 请求频率限制
+
+#### 功能配置
+- `command_execution`: 是否允许执行命令
+- `server_status`: 是否允许获取服务器状态
+- `command_tree`: 是否允许获取命令树
+- `command_tree_max_depth`: 命令树解析的最大深度（影响返回的命令数量）
+
+#### 危险命令
+- 列表中的命令将被阻止执行，以保护服务器安全
 
 ## 安全注意事项
 
