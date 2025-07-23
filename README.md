@@ -5,14 +5,7 @@
 ## 功能特性
 
 - **🚀 基础MCP服务**: 支持标准MCP协议的WebSocket连接
-- **📋 指令管理**: 获取完整的MCDR和Minecraft命令树，支持递归子命令解析
-- **⚡ 智能命令执行**: 执行MCDR命令和Minecraft服务器命令
-  - 🔥 **真实响应捕获**: 继承CommandSource类，捕获MCDR命令的真实响应内容
-  - ⏱️ **超时控制**: 3秒响应超时，避免长时间等待
-  - 🧹 **消息清理**: 自动移除颜色代码和格式化字符
-- **📊 增强状态查询**: 实时获取服务器状态，通过命令获取详细信息
-- **🔒 安全控制**: IP白名单和命令权限管理
-- **🧪 测试工具**: 内置命令执行功能测试，方便调试和验证
+- 暂无
 
 ## 安装与配置
 
@@ -80,7 +73,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
-#### 方法3：更简洁的Python版本（推荐）
+#### 方法3：更简洁的Python版本
 
 ```json
 {
@@ -97,7 +90,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
-#### 方法2：使用MCP桥接器（推荐用于生产环境）
+#### 方法2：使用MCP桥接器
 
 创建一个桥接脚本 `mcp_bridge.py`：
 
@@ -195,10 +188,6 @@ if __name__ == "__main__":
 ### 2. execute_command
 执行MCDR命令或Minecraft服务器命令，并捕获真实的命令响应
 
-**特性：**
-- 🔥 **真实响应捕获**: 对于MCDR命令（`!!`开头），会捕获并返回命令的真实响应内容
-- ⚡ **多类型支持**: 支持MCDR命令和Minecraft服务器命令
-- 🛡️ **错误处理**: 完善的错误处理和超时机制
 
 **参数：**
 - `command` (必需): 要执行的命令
@@ -331,12 +320,6 @@ if __name__ == "__main__":
 tail -f logs/latest.log | grep "mcdr_mcp_service"
 ```
 
-## 开发信息
-
-- **版本**: 1.0.0
-- **作者**: LoosePrince
-- **协议**: Model Context Protocol (MCP) 2024-11-05
-- **仓库**: https://github.com/LoosePrince/mcdr-mcp-service
 
 ## 许可证
 
@@ -352,4 +335,3 @@ tail -f logs/latest.log | grep "mcdr_mcp_service"
 - 初始版本发布
 - 支持基础MCP协议
 - 实现命令树获取和命令执行功能
-- 添加服务器状态查询功能 
