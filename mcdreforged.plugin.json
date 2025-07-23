@@ -1,0 +1,22 @@
+{
+  "id": "mcdr_mcp_service",
+  "version": "1.0.0",
+  "name": "MCDR MCP Service",
+  "description": {
+    "zh_cn": "为AI提供MCP协议接口的MCDR控制服务，支持实时日志监控、插件管理、服务器控制等功能",
+    "en_us": "MCDR control service providing MCP protocol interface for AI with real-time log monitoring, plugin management, server control features"
+  },
+  "author": [
+    "LoosePrince"
+  ],
+  "link": "https://github.com/LoosePrince/mcdr-mcp-service",
+  "dependencies": {
+    "mcdreforged": ">=2.0.0"
+  },
+  "requirements": [
+    "websockets>=10.0",
+    "aiohttp>=3.8.0",
+    "pydantic>=1.10.0",
+    "requests>=2.25.0"
+  ]
+} 

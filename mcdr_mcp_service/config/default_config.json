@@ -1,0 +1,37 @@
+{
+  "mcp_server": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8765,
+    "max_connections": 5
+  },
+  "security": {
+    "require_authentication": false,
+    "api_key": "",
+    "allowed_ips": [
+      "127.0.0.1",
+      "::1"
+    ],
+    "rate_limit": {
+      "requests_per_minute": 60,
+      "commands_per_minute": 30
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "max_log_lines": 1000,
+    "log_file_enabled": true
+  },
+  "features": {
+    "command_execution": true,
+    "server_status": true,
+    "command_tree": true
+  },
+  "dangerous_commands": [
+    "stop",
+    "restart",
+    "reload",
+    "exit",
+    "!!MCDR stop"
+  ]
+} 
