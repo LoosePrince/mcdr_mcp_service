@@ -25,13 +25,18 @@
   "features": {
     "command_execution": true,
     "server_status": true,
-    "command_tree": true
+    "command_tree": true,
+    "command_tree_max_depth": 3,
+    "mcdr_command_tools": true
   },
   "dangerous_commands": [
     "stop",
     "restart",
     "reload",
     "exit",
-    "!!MCDR stop"
+    "!!MCDR stop",
+    "!!MCDR plugin reloadall",
+    "!!MCDR plugin reload mcdr_mcp_service",
+    "!!MCDR plugin unload mcdr_mcp_service"
   ]
 } 

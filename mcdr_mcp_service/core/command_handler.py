@@ -144,28 +144,46 @@ class CommandHandler:
         
         try:
             # 获取MCDR命令管理器
+            self.logger.debug(f"正在获取MCDR命令管理器...")
             command_manager = self.server._mcdr_server.command_manager
+            
             # 获取所有根节点
+            self.logger.debug(f"正在获取根节点...")
             root_nodes = command_manager.root_nodes
+            self.logger.debug(f"找到 {len(root_nodes)} 个根节点")
             
             # 遍历所有根命令
             for literal, holders in root_nodes.items():
+                self.logger.debug(f"处理根命令: {literal}, 持有者数量: {len(holders)}")
                 # 遍历根命令的所有注册指令
                 for holder in holders:
-                    holder_plugin_id = holder.plugin.get_id()
-                    
-                    # 如果指定了插件ID，则只返回该插件的命令
-                    if plugin_id and holder_plugin_id != plugin_id:
-                        continue
-                    
-                    # 获取命令节点
-                    node = holder.node
-                    
-                    # 解析命令树，使用配置的最大深度
-                    self._parse_command_node(commands, holder_plugin_id, literal, node, self.command_tree_max_depth)
+                    try:
+                        holder_plugin_id = holder.plugin.get_id()
+                        
+                        # 如果是MCDR自带命令，将plugin_id设置为"mcdr"以便于识别
+                        if holder_plugin_id == "mcdreforged":
+                            holder_plugin_id = "mcdr"
+                        
+                        # 如果指定了插件ID，则只返回该插件的命令
+                        if plugin_id and holder_plugin_id != plugin_id:
+                            continue
+                        
+                        # 获取命令节点
+                        node = holder.node
+                        
+                        # 记录节点类型
+                        self.logger.debug(f"命令节点类型: {type(node).__name__}, 模块: {type(node).__module__}")
+                        
+                        # 解析命令树，使用配置的最大深度
+                        self._parse_command_node(commands, holder_plugin_id, literal, node, self.command_tree_max_depth)
+                    except Exception as e:
+                        self.logger.error(f"处理命令节点时出错: {e}")
+            
+            self.logger.debug(f"成功解析了 {len(commands)} 个命令")
             
             # 如果没有找到命令，可能是因为指定的插件ID不存在
             if plugin_id and not commands:
+                self.logger.warning(f"未找到插件ID为 {plugin_id} 的命令，添加默认命令")
                 # 添加一个基础的MCDR命令作为备选
                 mcdr_commands = [
                     {
@@ -213,7 +231,7 @@ class CommandHandler:
             }
             
         except Exception as e:
-            self.logger.error(f"获取命令树时出错: {e}")
+            self.logger.error(f"获取命令树时出错: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
@@ -222,57 +240,98 @@ class CommandHandler:
     
     def _parse_command_node(self, commands: List[Dict[str, Any]], plugin_id: str, prefix: str, node, max_depth: int = 3, current_depth: int = 0):
         """递归解析命令节点"""
-        # 避免过深的递归
-        if current_depth > max_depth:
-            return
-        
-        # 获取插件名称
-        plugin_name = "Unknown Plugin"
         try:
-            all_plugins = self.server.get_plugin_list()
-            for plugin_info in all_plugins:
-                if plugin_info.id == plugin_id:
-                    plugin_name = plugin_info.name
-                    break
-        except Exception:
-            pass
-        
-        # 判断节点类型
-        from mcdreforged.command.builder.nodes.literal import Literal
-        
-        # 如果是字面量节点，添加到命令列表
-        if isinstance(node, Literal):
-            for literal in node.literals:
-                command_path = f"{prefix} {literal}" if prefix else literal
+            # 避免过深的递归
+            if current_depth > max_depth:
+                return
+            
+            # 获取插件名称
+            plugin_name = "Unknown Plugin"
+            try:
+                all_plugins = self.server.get_plugin_list()
+                for plugin_info in all_plugins:
+                    if plugin_info.id == plugin_id:
+                        plugin_name = plugin_info.name
+                        break
+            except Exception as e:
+                self.logger.debug(f"获取插件名称时出错: {e}")
+            
+            # 判断节点类型 - 使用类名而不是直接导入
+            # 检查节点是否是Literal类型
+            is_literal = False
+            node_class_name = "Unknown"
+            node_module = "Unknown"
+            
+            try:
+                node_class_name = node.__class__.__name__
+                node_module = node.__class__.__module__
+                self.logger.debug(f"节点类型: {node_class_name}, 模块: {node_module}")
                 
-                # 检查是否有回调函数（表示这是一个可执行命令）
-                has_callback = hasattr(node, '_callback') and node._callback is not None
-                
-                if has_callback:
-                    # 获取命令描述
-                    description = ""
-                    if hasattr(node, 'get_description'):
+                # 检查类名是否为Literal
+                if node_class_name == 'Literal':
+                    is_literal = True
+                    self.logger.debug(f"找到Literal节点: {node}")
+                # 备选方案：检查类的模块路径是否包含literal
+                elif 'literal' in node_module.lower():
+                    is_literal = True
+                    self.logger.debug(f"通过模块路径识别为Literal节点: {node}")
+            except Exception as e:
+                self.logger.debug(f"检查节点类型时出错: {e}")
+            
+            # 检查节点是否有literals属性
+            has_literals = False
+            try:
+                if hasattr(node, 'literals'):
+                    has_literals = True
+                    self.logger.debug(f"节点有literals属性: {node.literals}")
+            except Exception as e:
+                self.logger.debug(f"检查literals属性时出错: {e}")
+            
+            # 如果是字面量节点，添加到命令列表
+            if (is_literal or has_literals) and hasattr(node, 'literals'):
+                try:
+                    for literal in node.literals:
+                        command_path = f"{prefix} {literal}" if prefix else literal
+                        
+                        # 检查是否有回调函数（表示这是一个可执行命令）
+                        has_callback = hasattr(node, '_callback') and node._callback is not None
+                        
+                        if has_callback:
+                            # 获取命令描述
+                            description = ""
+                            if hasattr(node, 'get_description'):
+                                try:
+                                    description = node.get_description() or ""
+                                except Exception as e:
+                                    self.logger.debug(f"获取命令描述时出错: {e}")
+                            
+                            # 添加到命令列表
+                            commands.append({
+                                "plugin_id": plugin_id,
+                                "plugin_name": plugin_name,
+                                "command": command_path,
+                                "description": description,
+                                "type": "mcdr_command" if command_path.startswith("!!") else "plugin_command"
+                            })
+                            self.logger.debug(f"添加命令: {command_path}")
+                        
+                        # 递归处理子节点
                         try:
-                            description = node.get_description() or ""
-                        except Exception:
-                            pass
-                    
-                    # 添加到命令列表
-                    commands.append({
-                        "plugin_id": plugin_id,
-                        "plugin_name": plugin_name,
-                        "command": command_path,
-                        "description": description,
-                        "type": "mcdr_command" if command_path.startswith("!!") else "plugin_command"
-                    })
-                
-                # 递归处理子节点
-                for child in node.get_children():
-                    self._parse_command_node(commands, plugin_id, command_path, child, max_depth, current_depth + 1)
-        else:
-            # 对于非字面量节点（如参数节点），直接处理其子节点
-            for child in node.get_children():
-                self._parse_command_node(commands, plugin_id, prefix, child, max_depth, current_depth + 1)
+                            for child in node.get_children():
+                                self._parse_command_node(commands, plugin_id, command_path, child, max_depth, current_depth + 1)
+                        except Exception as e:
+                            self.logger.debug(f"处理子节点时出错: {e}")
+                except Exception as e:
+                    self.logger.debug(f"处理literals时出错: {e}")
+            else:
+                # 对于非字面量节点（如参数节点），直接处理其子节点
+                try:
+                    for child in node.get_children():
+                        self._parse_command_node(commands, plugin_id, prefix, child, max_depth, current_depth + 1)
+                except Exception as e:
+                    self.logger.debug(f"处理非字面量节点的子节点时出错: {e}")
+        except Exception as e:
+            self.logger.error(f"解析命令节点时出错: {e}", exc_info=True)
     
     async def execute_command(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """执行命令并返回响应"""
@@ -327,6 +386,23 @@ class CommandHandler:
                 responses = cmd_source.responses.copy()
                 combined_response = "\n".join(responses)
                 
+                # 检查是否为"未知命令"情况
+                if combined_response and ("未知命令" in combined_response or "Unknown command" in combined_response):
+                    self.logger.info(f"检测到未知命令: {command}，尝试获取子命令")
+                    
+                    # 尝试获取该命令的子命令
+                    sub_commands = self._get_sub_commands(command)
+                    
+                    if sub_commands:
+                        # 有子命令，添加到响应中
+                        sub_cmd_text = "当前命令没有返回值，以下是它的子命令:\n" + "\n".join(sub_commands)
+                        responses.append(sub_cmd_text)
+                        combined_response = "\n".join(responses)
+                    else:
+                        # 没有子命令
+                        responses.append("命令无效，可能指令未提供正确的响应")
+                        combined_response = "\n".join(responses)
+                
                 # 清理过多的历史记录
                 self._clean_old_history()
                 
@@ -356,6 +432,102 @@ class CommandHandler:
                 "output": "",
                 "timestamp": int(time.time())
             }
+    
+    def _get_sub_commands(self, command: str) -> List[str]:
+        """获取命令的子命令列表"""
+        try:
+            # 解析命令前缀
+            parts = command.strip().split()
+            if not parts:
+                return []
+            
+            # 获取命令管理器
+            command_manager = self.server._mcdr_server.command_manager
+            root_nodes = command_manager.root_nodes
+            
+            # 查找匹配的根命令
+            root_literal = parts[0]  # 例如 !!MCDR
+            if root_literal not in root_nodes:
+                self.logger.debug(f"未找到根命令: {root_literal}")
+                return []
+            
+            # 找到匹配的根命令持有者
+            current_node = None
+            for holder in root_nodes[root_literal]:
+                node = holder.node
+                current_node = node
+                
+                # 遍历命令路径的每个部分
+                for i in range(1, len(parts)):
+                    part = parts[i]
+                    found = False
+                    
+                    for child in current_node.get_children():
+                        # 检查节点是否是Literal类型
+                        if self._is_literal_node(child) and hasattr(child, 'literals'):
+                            if part in child.literals:
+                                current_node = child
+                                found = True
+                                break
+                    
+                    if not found:
+                        # 如果找不到匹配的子节点，可能是命令不完整
+                        break
+                
+                # 如果找到了节点，返回其子命令
+                if current_node:
+                    return self._get_node_sub_commands(current_node, " ".join(parts))
+            
+            return []
+        except Exception as e:
+            self.logger.error(f"获取子命令时出错: {e}", exc_info=True)
+            return []
+    
+    def _is_literal_node(self, node) -> bool:
+        """检查节点是否为Literal类型"""
+        try:
+            # 检查类名是否为Literal
+            if node.__class__.__name__ == 'Literal':
+                return True
+            # 备选方案：检查类的模块路径是否包含literal
+            elif 'literal' in str(node.__class__.__module__).lower():
+                return True
+            # 检查是否有literals属性
+            elif hasattr(node, 'literals'):
+                return True
+        except Exception:
+            pass
+        return False
+    
+    def _get_node_sub_commands(self, node, prefix: str) -> List[str]:
+        """获取节点的子命令列表"""
+        sub_commands = []
+        
+        try:
+            for child in node.get_children():
+                if self._is_literal_node(child) and hasattr(child, 'literals'):
+                    for literal in child.literals:
+                        sub_cmd = f"{prefix} {literal}"
+                        # 检查是否有回调函数（表示这是一个可执行命令）
+                        has_callback = hasattr(child, '_callback') and child._callback is not None
+                        
+                        if has_callback:
+                            # 获取命令描述
+                            description = ""
+                            if hasattr(child, 'get_description'):
+                                try:
+                                    description = child.get_description() or ""
+                                except Exception:
+                                    pass
+                            
+                            if description:
+                                sub_cmd = f"{sub_cmd} - {description}"
+                            
+                            sub_commands.append(sub_cmd)
+        except Exception as e:
+            self.logger.error(f"获取节点子命令时出错: {e}", exc_info=True)
+        
+        return sub_commands
     
     def _execute_mc_command_sync(self, command: str, command_id: str) -> Dict[str, Any]:
         """同步执行MC命令并捕获响应"""
@@ -400,6 +572,15 @@ class CommandHandler:
             # 收集响应
             responses = listener.responses.copy()
             combined_response = "\n".join(responses)
+            
+            # 检查是否为"未知命令"情况
+            if combined_response and ("Unknown command" in combined_response or "未知命令" in combined_response):
+                self.logger.info(f"检测到未知的MC命令: {command}")
+                
+                # 对于MC命令，我们可以尝试添加一些通用的帮助信息
+                responses.append("命令无效，可能指令未提供正确的响应")
+                responses.append("尝试使用 /help 命令获取可用命令列表")
+                combined_response = "\n".join(responses)
             
             # 清理监听器
             with self.lock:

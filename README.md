@@ -169,6 +169,10 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
   - `"console"` (默认): 以控制台身份执行
   - `"player"`: 以玩家身份执行
 
+**特性：**
+- **智能子命令提示**: 当执行的命令返回"未知命令"时，系统会自动查找并返回该命令的所有可用子命令
+- **友好错误处理**: 对于无效命令，会提供有用的错误信息和建议
+
 **示例：**
 ```json
 {
@@ -198,6 +202,24 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
   "command_id": "cmd_1753261523_1234",
   "output": "MCDR 服务器状态信息的完整响应内容...",
   "responses": ["第一行响应", "第二行响应", "..."],
+  "timestamp": 1753261523
+}
+```
+
+**未知命令响应示例：**
+```json
+{
+  "success": true,
+  "command": "!!MCDR unknown",
+  "command_id": "cmd_1753261523_5678",
+  "output": "未知命令: !!MCDR unknown\n当前命令没有返回值，以下是它的子命令:\n!!MCDR status - 查看MCDR状态\n!!MCDR help - 显示帮助信息\n...",
+  "responses": [
+    "未知命令: !!MCDR unknown",
+    "当前命令没有返回值，以下是它的子命令:",
+    "!!MCDR status - 查看MCDR状态",
+    "!!MCDR help - 显示帮助信息",
+    "..."
+  ],
   "timestamp": 1753261523
 }
 ```
@@ -234,6 +256,52 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
+### 4. MCDR自带命令工具
+
+插件会自动将MCDR自带的命令（以`!!MCDR`开头）转换为独立的MCP工具，使AI可以直接调用这些命令，而无需使用`execute_command`工具。
+
+**工具命名规则：**
+- 工具名称格式：`mcdr_命令名称`，其中命令名称是将`!!MCDR`后面的部分转换而来
+- 空格会被替换为下划线，特殊字符会被移除
+
+**特性：**
+- **自动命令映射**: 自动将MCDR命令映射为独立工具
+- **智能子命令提示**: 当命令返回"未知命令"时，自动提供子命令列表
+- **命令缓存**: 使用命令映射缓存，提高性能
+
+**示例工具：**
+- `mcdr_status`: 对应`!!MCDR status`命令
+- `mcdr_plugin_list`: 对应`!!MCDR plugin list`命令
+- `mcdr_reload_plugin`: 对应`!!MCDR reload plugin`命令
+
+**调用示例：**
+```json
+{
+  "name": "mcdr_status",
+  "arguments": {}
+}
+```
+
+**响应格式：**
+```json
+{
+  "success": true,
+  "command": "!!MCDR status",
+  "output": "MCDR 版本: 2.x.x\n服务器状态: 运行中\n...",
+  "timestamp": 1753261523
+}
+```
+
+**未知命令响应示例：**
+```json
+{
+  "success": true,
+  "command": "!!MCDR unknown",
+  "output": "未知命令: !!MCDR unknown\n当前命令没有返回值，以下是它的子命令:\n!!MCDR status - 查看MCDR状态\n!!MCDR help - 显示帮助信息\n...\n工具 mcdr_unknown 可能需要更多参数，请尝试使用 !!MCDR help 获取帮助",
+  "timestamp": 1753261523
+}
+```
+
 ## 配置文件
 
 插件会在 `config/mcdr_mcp_service/config.json` 创建配置文件。
@@ -264,7 +332,8 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
     "command_execution": true,
     "server_status": true,
     "command_tree": true,
-    "command_tree_max_depth": 3
+    "command_tree_max_depth": 3,
+    "mcdr_command_tools": true
   },
   "dangerous_commands": [
     "stop",
@@ -295,6 +364,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 - `server_status`: 是否允许获取服务器状态
 - `command_tree`: 是否允许获取命令树
 - `command_tree_max_depth`: 命令树解析的最大深度（影响返回的命令数量）
+- `mcdr_command_tools`: 是否启用MCDR自带命令工具（将MCDR命令转换为独立工具）
 
 #### 危险命令
 - 列表中的命令将被阻止执行，以保护服务器安全

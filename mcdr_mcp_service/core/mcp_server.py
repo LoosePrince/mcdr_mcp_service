@@ -5,6 +5,7 @@ MCP服务器实现
 
 import asyncio
 import json
+import re
 import websockets
 import logging
 from typing import Dict, Any, List, Optional
@@ -337,6 +338,10 @@ class MCPServer:
             }
         ]
         
+        # 获取MCDR自带命令并添加为工具
+        mcdr_command_tools = await self._get_mcdr_command_tools()
+        tools.extend(mcdr_command_tools)
+        
         return {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -345,6 +350,139 @@ class MCPServer:
             }
         }
     
+    async def _get_mcdr_command_tools(self) -> List[Dict[str, Any]]:
+        """获取MCDR自带命令并将它们转换为MCP工具"""
+        # 检查是否启用MCDR命令工具
+        if not self.config.get("features", {}).get("mcdr_command_tools", True):
+            self.logger.info("MCDR命令工具功能已禁用")
+            return []
+            
+        mcdr_tools = []
+        
+        try:
+            # 获取MCDR命令树
+            self.logger.debug("正在获取MCDR命令树...")
+            mcdr_commands = await self.command_handler.get_command_tree({"plugin_id": "mcdr"})
+            
+            # 如果获取成功，处理命令
+            if mcdr_commands.get("success", False):
+                self.logger.debug(f"成功获取MCDR命令树，共 {len(mcdr_commands.get('commands', []))} 个命令")
+                for cmd in mcdr_commands.get("commands", []):
+                    try:
+                        command = cmd.get("command", "")
+                        # 只处理以!!MCDR开头的命令
+                        if command.startswith("!!MCDR "):
+                            description = cmd.get("description", "MCDR命令")
+                            
+                            # 创建工具名称
+                            tool_name = f"mcdr_{self._command_to_tool_name(command)}"
+                            self.logger.debug(f"处理MCDR命令: {command} -> 工具名称: {tool_name}")
+                            
+                            # 创建一个工具
+                            tool = {
+                                "name": tool_name,
+                                "description": f"{description} (MCDR自带命令)",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {}
+                                },
+                                "outputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {"type": "boolean"},
+                                        "command": {"type": "string"},
+                                        "output": {"type": "string"},
+                                        "timestamp": {"type": "integer"}
+                                    }
+                                },
+                                "metadata": {
+                                    "mcdr_command": command
+                                }
+                            }
+                            
+                            # 添加到工具列表
+                            mcdr_tools.append(tool)
+                            self.logger.debug(f"添加MCDR命令工具: {tool_name}")
+                    except Exception as e:
+                        self.logger.error(f"处理MCDR命令时出错: {e}")
+            else:
+                error = mcdr_commands.get("error", "未知错误")
+                self.logger.error(f"获取MCDR命令树失败: {error}")
+                
+                # 如果主要方法失败，使用备用方法
+                self.logger.debug("使用备用方法获取MCDR命令")
+                mcdr_tools = self._get_default_mcdr_commands()
+            
+            # 如果没有找到任何命令，使用备用方法
+            if not mcdr_tools:
+                self.logger.debug("未找到MCDR命令，使用备用方法")
+                mcdr_tools = self._get_default_mcdr_commands()
+            
+            self.logger.debug(f"已动态添加 {len(mcdr_tools)} 个MCDR命令工具")
+            return mcdr_tools
+            
+        except Exception as e:
+            self.logger.error(f"获取MCDR命令工具失败: {e}", exc_info=True)
+            # 使用备用方法
+            self.logger.debug("使用备用方法获取MCDR命令")
+            return self._get_default_mcdr_commands()
+    
+    def _get_default_mcdr_commands(self) -> List[Dict[str, Any]]:
+        """获取默认的MCDR命令工具列表"""
+        default_commands = [
+            {"command": "!!MCDR status", "description": "查看MCDR状态"},
+            {"command": "!!MCDR help", "description": "显示MCDR帮助"},
+            {"command": "!!MCDR plugin list", "description": "列出所有插件"},
+            {"command": "!!MCDR reload plugin", "description": "重载指定插件"},
+            {"command": "!!MCDR reload config", "description": "重载配置文件"},
+            {"command": "!!MCDR permission list", "description": "列出权限等级"}
+        ]
+        
+        mcdr_tools = []
+        for cmd in default_commands:
+            command = cmd["command"]
+            description = cmd["description"]
+            tool_name = f"mcdr_{self._command_to_tool_name(command)}"
+            
+            tool = {
+                "name": tool_name,
+                "description": f"{description} (MCDR自带命令)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "command": {"type": "string"},
+                        "output": {"type": "string"},
+                        "timestamp": {"type": "integer"}
+                    }
+                },
+                "metadata": {
+                    "mcdr_command": command
+                }
+            }
+            
+            mcdr_tools.append(tool)
+            
+        self.logger.info(f"已创建 {len(mcdr_tools)} 个默认MCDR命令工具")
+        return mcdr_tools
+    
+    def _command_to_tool_name(self, command: str) -> str:
+        """将MCDR命令转换为工具名称"""
+        # 移除!!MCDR前缀
+        name = command.replace("!!MCDR ", "")
+        # 替换空格为下划线
+        name = name.replace(" ", "_")
+        # 移除特殊字符
+        name = re.sub(r'[^\w_]', '', name)
+        # 确保名称不为空
+        if not name:
+            name = "command"
+        return name
+        
     async def _handle_tools_call(self, request_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """处理tools/call请求"""
         tool_name = params.get("name")
@@ -356,6 +494,9 @@ class MCPServer:
             result = await self.command_handler.execute_command(arguments)
         elif tool_name == "get_server_status":
             result = await self.command_handler.get_server_status(arguments)
+        elif tool_name.startswith("mcdr_"):
+            # 处理动态MCDR命令工具
+            result = await self._handle_mcdr_command_tool(tool_name, arguments)
         else:
             return self._create_error_response(
                 request_id, -32601, "Unknown tool", f"Tool '{tool_name}' not found"
@@ -373,6 +514,89 @@ class MCPServer:
                 ]
             }
         }
+    
+    async def _handle_mcdr_command_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """处理动态MCDR命令工具调用"""
+        try:
+            self.logger.info(f"处理MCDR命令工具: {tool_name}")
+            
+            # 尝试从工具名称中提取命令
+            command_to_execute = None
+            
+            # 1. 首先检查是否有缓存的命令映射
+            if hasattr(self, '_mcdr_command_mapping') and tool_name in self._mcdr_command_mapping:
+                command_to_execute = self._mcdr_command_mapping[tool_name]
+                self.logger.debug(f"从缓存中找到命令: {command_to_execute}")
+            
+            # 2. 如果没有缓存，尝试从MCDR命令树中查找
+            if not command_to_execute:
+                # 获取MCDR命令树以找到对应的命令
+                mcdr_commands = await self.command_handler.get_command_tree({"plugin_id": "mcdr"})
+                
+                # 创建命令映射缓存（如果不存在）
+                if not hasattr(self, '_mcdr_command_mapping'):
+                    self._mcdr_command_mapping = {}
+                
+                # 查找匹配的命令
+                for cmd in mcdr_commands.get("commands", []):
+                    if cmd.get("command", "").startswith("!!MCDR "):
+                        command = cmd.get("command")
+                        mapped_tool_name = f"mcdr_{self._command_to_tool_name(command)}"
+                        
+                        # 添加到缓存
+                        self._mcdr_command_mapping[mapped_tool_name] = command
+                        
+                        if tool_name == mapped_tool_name:
+                            command_to_execute = command
+                            self.logger.debug(f"从命令树中找到命令: {command_to_execute}")
+                            break
+            
+            # 3. 如果仍然没有找到，尝试从工具名称反向推导命令
+            if not command_to_execute:
+                # 移除前缀"mcdr_"
+                if tool_name.startswith("mcdr_"):
+                    command_part = tool_name[5:]
+                    # 将下划线替换回空格
+                    command_part = command_part.replace("_", " ")
+                    # 添加MCDR前缀
+                    command_to_execute = f"!!MCDR {command_part}"
+                    self.logger.debug(f"从工具名称推导命令: {command_to_execute}")
+            
+            # 如果找到命令，执行它
+            if command_to_execute:
+                self.logger.info(f"执行MCDR命令: {command_to_execute}")
+                result = await self.command_handler.execute_command({"command": command_to_execute})
+                
+                # 检查是否为"未知命令"情况
+                output = result.get("output", "")
+                if output and ("未知命令" in output or "Unknown command" in output):
+                    # 如果是工具调用，我们可以提供更友好的错误信息
+                    self.logger.info(f"工具 {tool_name} 执行的命令 {command_to_execute} 返回未知命令")
+                    
+                    # 尝试获取更多信息
+                    if "responses" in result:
+                        responses = result["responses"]
+                        if "当前命令没有返回值，以下是它的子命令" not in output:
+                            # 如果没有子命令信息，添加一个友好的提示
+                            responses.append(f"工具 {tool_name} 可能需要更多参数，请尝试使用 !!MCDR help 获取帮助")
+                            result["output"] = "\n".join(responses)
+                
+                return result
+            else:
+                self.logger.error(f"找不到与工具 {tool_name} 对应的MCDR命令")
+                return {
+                    "success": False,
+                    "error": f"找不到与工具 {tool_name} 对应的MCDR命令",
+                    "output": ""
+                }
+                
+        except Exception as e:
+            self.logger.error(f"执行MCDR命令工具失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "output": ""
+            }
     
     async def _handle_resources_list(self, request_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """处理resources/list请求"""
