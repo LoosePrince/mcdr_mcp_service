@@ -32,6 +32,11 @@ class MCPServer:
         port = self.config["mcp_server"]["port"]
         
         try:
+            # 临时抑制一些 websockets 的日志
+            import logging
+            websockets_logger = logging.getLogger('websockets.server')
+            original_ws_level = websockets_logger.level
+            
             self.websocket_server = await websockets.serve(
                 self.handle_client,
                 host,
@@ -74,14 +79,58 @@ class MCPServer:
         """同步停止MCP服务器（用于插件卸载）"""
         if self.websocket_server:
             try:
-                # 直接关闭服务器，不等待
-                self.websocket_server.close()
-                self.websocket_server = None
-                # 清空客户端连接
+                # 清空客户端连接（不尝试异步关闭）
                 self.connected_clients.clear()
+                
+                # 关闭服务器
+                self.websocket_server.close()
+                
+                # 等待端口真正释放
+                import socket
+                import time
+                host = self.config["mcp_server"]["host"]
+                port = self.config["mcp_server"]["port"]
+                
+                # 检查端口是否释放的函数
+                def is_port_free():
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                            s.settimeout(0.1)
+                            result = s.connect_ex((host, port))
+                            return result != 0  # 如果连接失败，说明端口已释放
+                    except Exception:
+                        return True  # 如果出现异常，假设端口已释放
+                
+                # 等待端口释放，最多等待5秒
+                max_wait_time = 5.0
+                wait_interval = 0.1
+                total_waited = 0.0
+                
+                while total_waited < max_wait_time:
+                    if is_port_free():
+                        break
+                    time.sleep(wait_interval)
+                    total_waited += wait_interval
+                
+                if not is_port_free():
+                    self.logger.warning(f"端口 {port} 可能仍被占用，但继续执行卸载")
+                
+                # 标记为已关闭
+                self.websocket_server = None
+                
                 self.logger.info("MCP服务器已同步停止")
             except Exception as e:
                 self.logger.error(f"同步停止MCP服务器时出错: {e}")
+                # 即使出错也要清理状态
+                self.websocket_server = None
+                self.connected_clients.clear()
+                
+            # 确保所有资源都被释放
+            try:
+                import gc
+                gc.collect()
+            except Exception:
+                pass
     
     async def handle_client(self, websocket: WebSocketServerProtocol, path: str = None):
         """处理客户端连接"""
@@ -232,14 +281,6 @@ class MCPServer:
                         }
                     }
                 }
-            },
-            {
-                "name": "test_command_execution",
-                "description": "测试命令执行功能，验证MCDR和Minecraft命令是否能正常执行并捕获响应",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {}
-                }
             }
         ]
         
@@ -262,13 +303,6 @@ class MCPServer:
             result = await self.command_handler.execute_command(arguments)
         elif tool_name == "get_server_status":
             result = await self.command_handler.get_server_status(arguments)
-        elif tool_name == "test_command_execution":
-            # 在线程池中执行测试
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, 
-                self.command_handler.test_command_execution
-            )
         else:
             return self._create_error_response(
                 request_id, -32601, "Unknown tool", f"Tool '{tool_name}' not found"

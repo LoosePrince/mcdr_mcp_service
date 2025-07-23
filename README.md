@@ -175,29 +175,6 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
-### 4. test_command_execution
-测试命令执行功能，验证MCDR和Minecraft命令是否能正常执行并捕获响应
-
-**用途：**
-- 🧪 测试MCP服务的命令执行功能是否正常
-- 📊 获取命令执行的测试报告
-- 🔍 调试命令响应捕获问题
-
-**参数：** 无
-
-**示例：**
-```json
-{
-  "name": "test_command_execution",
-  "arguments": {}
-}
-```
-
-**测试命令：**
-- `!!MCDR status` - 测试MCDR状态命令
-- `!!MCDR plugin list` - 测试插件列表命令  
-- `/list` - 测试Minecraft玩家列表命令
-
 ## 配置文件
 
 插件会在 `config/mcdr_mcp_service/config.json` 创建配置文件。
