@@ -2,6 +2,8 @@
 
 一个为MCDReforged (MCDR) 提供Model Context Protocol (MCP) 服务接口的插件，让AI可以通过标准化协议控制和监控MCDR服务器。
 
+> 本插件目前仅为测试版本，我们无法保证其稳定性，请谨慎使用。
+
 ## 功能特性
 
 - **🚀 基础MCP服务**: 支持标准MCP协议的WebSocket连接
@@ -41,7 +43,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 
 如果你使用支持MCP的AI客户端（如Claude Desktop），请在配置文件中添加以下配置：
 
-#### 方法1：直接WebSocket连接（内联Python代码）
+#### 方法1：直接WebSocket连接（推荐）
 
 ```json
 {
@@ -92,67 +94,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 
 #### 方法2：使用MCP桥接器
 
-创建一个桥接脚本 `mcp_bridge.py`：
-
-```python
-#!/usr/bin/env python3
-import asyncio
-import websockets
-import json
-import sys
-from typing import Dict, Any
-
-async def mcp_bridge():
-    """MCP桥接器，连接到MCDR MCP服务"""
-    uri = "ws://127.0.0.1:8765"
-    
-    try:
-        async with websockets.connect(uri) as websocket:
-            # 处理来自stdin的MCP请求
-            while True:
-                try:
-                    line = input()
-                    request = json.loads(line)
-                    
-                    # 发送请求到MCDR MCP服务
-                    await websocket.send(json.dumps(request))
-                    
-                    # 接收响应并输出到stdout
-                    response = await websocket.recv()
-                    print(response)
-                    sys.stdout.flush()
-                    
-                except EOFError:
-                    break
-                except json.JSONDecodeError as e:
-                    error_response = {
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32700, "message": "Parse error", "data": str(e)}
-                    }
-                    print(json.dumps(error_response))
-                    sys.stdout.flush()
-                except Exception as e:
-                    error_response = {
-                        "jsonrpc": "2.0", 
-                        "id": None,
-                        "error": {"code": -32603, "message": "Internal error", "data": str(e)}
-                    }
-                    print(json.dumps(error_response))
-                    sys.stdout.flush()
-                    
-    except Exception as e:
-        error_response = {
-            "jsonrpc": "2.0",
-            "id": None, 
-            "error": {"code": -32603, "message": "Connection error", "data": str(e)}
-        }
-        print(json.dumps(error_response))
-        sys.stdout.flush()
-
-if __name__ == "__main__":
-    asyncio.run(mcp_bridge())
-```
+提供了一个桥接脚本 `mcp_bridge.py`：
 
 然后在MCP配置中使用：
 
@@ -168,6 +110,8 @@ if __name__ == "__main__":
 ```
 
 ## 可用工具
+
+> 随更新，工具列表可能会有所变化
 
 插件提供以下MCP工具：
 
@@ -254,37 +198,10 @@ if __name__ == "__main__":
 - `!!MCDR plugin list` - 测试插件列表命令  
 - `/list` - 测试Minecraft玩家列表命令
 
-## 可用资源
-
-### 1. mcdr://server/status
-获取服务器状态信息的资源
-
-### 2. mcdr://commands/tree  
-获取命令树的资源
-
 ## 配置文件
 
 插件会在 `config/mcdr_mcp_service/config.json` 创建配置文件。
 
-### 主要配置项：
-
-```json
-{
-  "mcp_server": {
-    "enabled": true,
-    "host": "127.0.0.1", 
-    "port": 8765,
-    "max_connections": 5
-  },
-  "security": {
-    "require_authentication": false,
-    "allowed_ips": ["127.0.0.1", "::1"]
-  },
-  "logging": {
-    "level": "INFO"
-  }
-}
-```
 
 ## 安全注意事项
 
