@@ -1,0 +1,43 @@
+# 用于部署静态内容到 GitHub Pages 的简单工作流
+name: 部署静态内容到 Pages
+
+on:
+  # 仅在 main 分支的 assets 目录有变更时触发
+  push:
+    branches: ["main"]
+    paths:
+      - "assets/**"  # 仅当 assets 文件夹内的文件有变更时才运行
+
+  # 允许从 Actions 标签手动运行此工作流
+  workflow_dispatch:
+
+# 设置 GITHUB_TOKEN 权限以允许部署到 GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 只允许一个并发部署，跳过在运行中和最新排队之间的运行
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 设置 Pages
+        uses: actions/configure-pages@v5
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # 仅上传 assets 文件夹
+          path: 'assets'
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
