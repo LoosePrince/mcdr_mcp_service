@@ -137,6 +137,10 @@ html {
     box-sizing: border-box;
 }
 
+code {
+    word-break: break-all;
+}
+
 .code-block code {
     white-space: pre;
     word-break: normal;
