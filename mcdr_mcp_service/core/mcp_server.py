@@ -335,6 +335,91 @@ class MCPServer:
                         }
                     }
                 }
+            },
+            {
+                "name": "get_recent_logs",
+                "description": "获取最近的服务器日志（支持MCDR和Minecraft日志）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "lines_count": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50,
+                            "default": 20,
+                            "description": "要获取的日志行数，最大50行"
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "total_lines": {"type": "integer"},
+                        "requested_lines": {"type": "integer"},
+                        "returned_lines": {"type": "integer"},
+                        "logs": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "line_number": {"type": "integer"},
+                                    "content": {"type": "string"},
+                                    "timestamp": {"type": "string"},
+                                    "source": {"type": "string"},
+                                    "is_command": {"type": "boolean"}
+                                }
+                            }
+                        },
+                        "timestamp": {"type": "integer"}
+                    }
+                }
+            },
+            {
+                "name": "get_logs_range",
+                "description": "获取指定范围的服务器日志（支持MCDR和Minecraft日志）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "start_line": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0,
+                            "description": "起始行号（从0开始）"
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "结束行号（不包含），最多获取50行"
+                        }
+                    },
+                    "required": ["end_line"]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "total_lines": {"type": "integer"},
+                        "start_line": {"type": "integer"},
+                        "end_line": {"type": "integer"},
+                        "requested_lines": {"type": "integer"},
+                        "returned_lines": {"type": "integer"},
+                        "logs": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "line_number": {"type": "integer"},
+                                    "content": {"type": "string"},
+                                    "timestamp": {"type": "string"},
+                                    "source": {"type": "string"},
+                                    "is_command": {"type": "boolean"}
+                                }
+                            }
+                        },
+                        "timestamp": {"type": "integer"}
+                    }
+                }
             }
         ]
         
@@ -494,6 +579,10 @@ class MCPServer:
             result = await self.command_handler.execute_command(arguments)
         elif tool_name == "get_server_status":
             result = await self.command_handler.get_server_status(arguments)
+        elif tool_name == "get_recent_logs":
+            result = await self.command_handler.get_recent_logs(arguments)
+        elif tool_name == "get_logs_range":
+            result = await self.command_handler.get_logs_range(arguments)
         elif tool_name.startswith("mcdr_"):
             # 处理动态MCDR命令工具
             result = await self._handle_mcdr_command_tool(tool_name, arguments)

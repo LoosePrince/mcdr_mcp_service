@@ -81,7 +81,7 @@ class DirectCommandListener:
 class CommandHandler:
     """命令处理器类"""
     
-    def __init__(self, server_interface: ServerInterface, config: Dict[str, Any] = None):
+    def __init__(self, server_interface: ServerInterface, config: Dict[str, Any] = None, log_watcher=None):
         self.server = server_interface
         self.logger = server_interface.logger
         self.executor = ThreadPoolExecutor(max_workers=2)
@@ -94,6 +94,9 @@ class CommandHandler:
         # 配置
         self.config = config or {}
         self.command_tree_max_depth = self.config.get("features", {}).get("command_tree_max_depth", 3)
+        
+        # LogWatcher实例
+        self.log_watcher = log_watcher
         
         # 注册服务器输出监听器
         self.server.register_event_listener(MCDRPluginEvents.GENERAL_INFO, self._on_server_output)
@@ -669,5 +672,173 @@ class CommandHandler:
                 "success": False,
                 "error": str(e),
                 "status": "unknown"
+            }
+    
+    async def get_recent_logs(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """获取最近的日志"""
+        lines_count = arguments.get("lines_count", 20)
+        
+        # 限制最大行数为50
+        if lines_count > 50:
+            lines_count = 50
+        elif lines_count <= 0:
+            lines_count = 20
+        
+        try:
+            if not self.log_watcher:
+                return {
+                    "success": False,
+                    "error": "LogWatcher未初始化",
+                    "logs": []
+                }
+            
+            # 在线程池中执行
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self.executor,
+                self._get_recent_logs_sync,
+                lines_count
+            )
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"获取最近日志失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "logs": []
+            }
+    
+    def _get_recent_logs_sync(self, lines_count: int) -> Dict[str, Any]:
+        """同步获取最近日志"""
+        try:
+            # 使用log_watcher的get_latest_logs方法
+            result = self.log_watcher.get_latest_logs(max_lines=lines_count)
+            
+            # 格式化日志数据
+            formatted_logs = []
+            for i, log_entry in enumerate(result.get("logs", [])):
+                if isinstance(log_entry, dict):
+                    formatted_logs.append({
+                        "line_number": log_entry.get("line_number", i),
+                        "content": log_entry.get("content", ""),
+                        "timestamp": log_entry.get("timestamp"),
+                        "source": log_entry.get("source", "all"),
+                        "is_command": log_entry.get("is_command", False)
+                    })
+                else:
+                    # 如果是字符串格式，直接处理
+                    formatted_logs.append({
+                        "line_number": i,
+                        "content": str(log_entry),
+                        "timestamp": None,
+                        "source": "all",
+                        "is_command": False
+                    })
+            
+            return {
+                "success": True,
+                "total_lines": result.get("total_lines", len(formatted_logs)),
+                "requested_lines": lines_count,
+                "returned_lines": len(formatted_logs),
+                "logs": formatted_logs,
+                "timestamp": int(time.time())
+            }
+            
+        except Exception as e:
+            self.logger.error(f"同步获取最近日志失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "logs": []
+            }
+    
+    async def get_logs_range(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """获取指定范围的日志"""
+        start_line = arguments.get("start_line", 0)
+        end_line = arguments.get("end_line", 50)
+        
+        # 确保参数有效
+        if start_line < 0:
+            start_line = 0
+        if end_line <= start_line:
+            end_line = start_line + 20
+        
+        # 限制最大范围为50行
+        max_lines = end_line - start_line
+        if max_lines > 50:
+            end_line = start_line + 50
+            max_lines = 50
+        
+        try:
+            if not self.log_watcher:
+                return {
+                    "success": False,
+                    "error": "LogWatcher未初始化",
+                    "logs": []
+                }
+            
+            # 在线程池中执行
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self.executor,
+                self._get_logs_range_sync,
+                start_line,
+                max_lines
+            )
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"获取日志范围失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "logs": []
+            }
+    
+    def _get_logs_range_sync(self, start_line: int, max_lines: int) -> Dict[str, Any]:
+        """同步获取日志范围"""
+        try:
+            # 使用log_watcher的get_logs_after_line方法
+            result = self.log_watcher.get_logs_after_line(start_line=start_line, max_lines=max_lines)
+            
+            # 格式化日志数据
+            formatted_logs = []
+            for i, log_entry in enumerate(result.get("logs", [])):
+                if isinstance(log_entry, dict):
+                    formatted_logs.append({
+                        "line_number": start_line + i,
+                        "content": log_entry.get("content", ""),
+                        "timestamp": log_entry.get("timestamp"),
+                        "source": log_entry.get("source", "all"),
+                        "is_command": log_entry.get("is_command", False)
+                    })
+                else:
+                    # 如果是字符串格式，直接处理
+                    formatted_logs.append({
+                        "line_number": start_line + i,
+                        "content": str(log_entry),
+                        "timestamp": None,
+                        "source": "all",
+                        "is_command": False
+                    })
+            
+            return {
+                "success": True,
+                "total_lines": result.get("total_lines", 0),
+                "start_line": start_line,
+                "end_line": start_line + len(formatted_logs),
+                "requested_lines": max_lines,
+                "returned_lines": len(formatted_logs),
+                "logs": formatted_logs,
+                "timestamp": int(time.time())
+            }
+            
+        except Exception as e:
+            self.logger.error(f"同步获取日志范围失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "logs": []
             }
     

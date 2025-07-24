@@ -13,11 +13,13 @@ from mcdreforged.api.all import *
 
 from .core.mcp_server import MCPServer
 from .core.command_handler import CommandHandler
+from .utils.log_watcher import LogWatcher
 
 # 全局变量
 mcp_server_instance = None
 mcp_server_thread = None
 stop_server_event = None
+log_watcher_instance = None
 
 
 def on_load(server: PluginServerInterface, old):
@@ -31,6 +33,9 @@ def on_load(server: PluginServerInterface, old):
     config_path = Path(server.get_data_folder()) / "config.json"
     config = load_config(server, config_path)
     
+    # 初始化LogWatcher
+    initialize_log_watcher(server)
+    
     # 启动MCP服务器
     start_mcp_server(server, config)
     
@@ -43,6 +48,9 @@ def on_unload(server: PluginServerInterface):
     
     # 停止MCP服务器
     stop_mcp_server(server)
+    
+    # 清理LogWatcher
+    cleanup_log_watcher(server)
     
     # 清理日志过滤器
     cleanup_log_filters(server)
@@ -145,7 +153,7 @@ def start_mcp_server(server: PluginServerInterface, config: Dict[str, Any]):
         stop_server_event = threading.Event()
         
         # 创建命令处理器
-        command_handler = CommandHandler(server, config)
+        command_handler = CommandHandler(server, config, log_watcher_instance)
         
         # 创建MCP服务器实例
         mcp_server_instance = MCPServer(server, command_handler, config)
@@ -312,3 +320,61 @@ def cleanup_log_filters(server: PluginServerInterface):
         server.logger.debug("已清理日志过滤器")
     except Exception as e:
         server.logger.debug(f"清理日志过滤器失败: {e}") 
+
+
+def initialize_log_watcher(server: PluginServerInterface):
+    """初始化LogWatcher"""
+    global log_watcher_instance
+    
+    try:
+        # 如果已经有实例，先清理
+        if log_watcher_instance:
+            try:
+                log_watcher_instance.stop()
+            except Exception as e:
+                server.logger.debug(f"清理现有LogWatcher失败: {e}")
+            log_watcher_instance = None
+        
+        # 创建新的LogWatcher实例
+        log_watcher_instance = LogWatcher(server_interface=server)
+        
+        # 设置日志捕获
+        log_watcher_instance._setup_log_capture()
+        
+        # 注册MCDR事件监听器
+        server.register_event_listener(MCDRPluginEvents.GENERAL_INFO, log_watcher_instance.on_mcdr_info)
+        server.register_event_listener(MCDRPluginEvents.USER_INFO, log_watcher_instance.on_server_output)
+        
+        server.logger.info("LogWatcher已成功初始化")
+        
+    except Exception as e:
+        server.logger.error(f"初始化LogWatcher失败: {e}")
+        log_watcher_instance = None
+
+
+def cleanup_log_watcher(server: PluginServerInterface):
+    """清理LogWatcher"""
+    global log_watcher_instance
+    
+    try:
+        if log_watcher_instance:
+            # 停止LogWatcher
+            log_watcher_instance.stop()
+            
+            # 取消事件监听器注册
+            try:
+                # 注意：MCDR可能没有直接的取消注册方法，这里只是尝试
+                # 实际的取消注册可能需要更复杂的处理
+                pass
+            except Exception as e:
+                server.logger.debug(f"取消事件监听器注册失败: {e}")
+            
+            # 清空引用
+            log_watcher_instance = None
+            
+            server.logger.info("LogWatcher已清理")
+        
+    except Exception as e:
+        server.logger.error(f"清理LogWatcher失败: {e}")
+        # 即使失败也要清空引用
+        log_watcher_instance = None 
