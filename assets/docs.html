@@ -98,7 +98,8 @@
     <!-- 文档内容 -->
     <section class="py-16">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid lg:grid-cols-4 gap-8">
+            <div class="grid lg:grid-cols-4 gap-8"
+                style="min-width:0;max-width:100%;overflow-x:auto;">
                 <!-- 侧边栏导航 -->
                 <div class="lg:col-span-1">
                     <div class="sticky top-24">
@@ -113,7 +114,7 @@
                 </div>
 
                 <!-- 主要内容 -->
-                <div class="lg:col-span-3">
+                <div class="lg:col-span-3 min-w-0 max-w-full">
                     <!-- 快速开始 -->
                     <section id="getting-started" class="mb-12">
                         <h2 class="text-3xl font-bold mb-6">快速开始</h2>
@@ -132,7 +133,7 @@
                     <section id="mcp-services" class="mb-12">
                         <h2 class="text-3xl font-bold mb-6">MCP 服务</h2>
                         <p class="text-lg text-gray-400 mb-8">MCP 服务为 AI 和自动化工具提供标准化接口，支持命令执行、状态查询、日志管理等多种能力。以下为主要服务说明：</p>
-
+                        
                         <!-- get_command_tree -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_command_tree</h3>
@@ -145,7 +146,7 @@
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_command_tree",
   "arguments": {}
 }</code></pre></div>
@@ -165,15 +166,15 @@
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "execute_command",
   "arguments": {
     "command": "!!MCDR status"
   }
 }</code></pre></div>
                             </div>
-                        </div>
-
+                            </div>
+                            
                         <!-- get_server_status -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_server_status</h3>
@@ -183,10 +184,10 @@
                                 <ul class="text-sm text-gray-500 space-y-1">
                                     <li><code>include_players</code> (可选): 是否包含在线玩家信息</li>
                                 </ul>
-                            </div>
+                                </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_server_status",
   "arguments": {}
 }</code></pre></div>
@@ -205,13 +206,13 @@
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_recent_logs",
   "arguments": {"lines_count": 20}
 }</code></pre></div>
+                                </div>
                             </div>
-                        </div>
-
+                            
                         <!-- get_logs_range -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_logs_range</h3>
@@ -222,10 +223,10 @@
                                     <li><code>start_line</code> (可选): 起始行号</li>
                                     <li><code>end_line</code> (必需): 结束行号</li>
                                 </ul>
-                            </div>
+                                </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_logs_range",
   "arguments": {"start_line": 100, "end_line": 150}
 }</code></pre></div>
@@ -247,7 +248,7 @@
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "search_logs",
   "arguments": {"query": "玩家登录", "context_lines": 2}
 }</code></pre></div>
@@ -268,7 +269,7 @@
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "search_logs_by_ids",
   "arguments": {"start_id": 1200, "end_id": 1250, "context_lines": 1}
 }</code></pre></div>
@@ -281,7 +282,7 @@
                             <p class="text-gray-400 mb-2">将 MCDR 自带命令（如 <code>!!MCDR status</code>）自动映射为独立工具，便于 AI 直接调用。</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">调用示例</h4>
-                                <div class="code-block"><pre><code>{
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "mcdr_status",
   "arguments": {}
 }</code></pre></div>
@@ -293,9 +294,9 @@
                     <section id="configuration" class="mb-12">
                         <h2 class="text-3xl font-bold mb-6">配置选项</h2>
                         
-                        <div class="bg-dark-800 rounded-lg p-6">
+                        <div class="bg-dark-800 rounded-lg p-6 min-w-0 max-w-full">
                             <h3 class="text-xl font-semibold mb-4">配置文件结构</h3>
-                            <div class="code-block">
+                            <div class="code-block min-w-0 max-w-full">
                                 <pre><code>{
   "mcp_server": {
     "host": "localhost",           // MCP 服务器监听地址

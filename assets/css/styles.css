@@ -99,6 +99,10 @@ html {
     border: 1px solid #334155;
     border-radius: 8px;
     position: relative;
+    min-width: 0;
+    overflow: hidden;
+    max-width: 100%;
+    width: 100%;
 }
 
 .code-block::before {
@@ -122,10 +126,27 @@ html {
     letter-spacing: 4px;
 }
 
-pre {
+.code-block pre {
     margin-top: 40px !important;
     padding: 20px;
-    overflow-x: auto;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    min-width: 0;
+    max-width: 100%;
+    white-space: pre;
+    box-sizing: border-box;
+}
+
+.code-block code {
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+    display: block;
+    max-width: 100%;
+}
+
+.w-8 {
+    min-width: 2rem;
 }
 
 /* 导航栏滚动效果 */

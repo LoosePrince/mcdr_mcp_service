@@ -107,7 +107,7 @@
                 <p class="text-gray-400 text-lg">为MCDR服务器提供全方位的AI管理解决方案</p>
             </div>
             
-            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 w-full">
                 <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
                     <div class="text-primary text-3xl mb-4">
                         <i class="fas fa-rocket"></i>
@@ -167,7 +167,7 @@
                 <p class="text-gray-400 text-lg">简单几步，快速部署您的AI管理服务器</p>
             </div>
             
-            <div class="grid lg:grid-cols-2 gap-12">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 w-full">
                 <div>
                     <h3 class="text-2xl font-semibold mb-6">安装步骤</h3>
                     <div class="space-y-6">
@@ -225,6 +225,10 @@
     }
   }
 }</code></pre>
+                            <button @click="copyToClipboard(step.command)" 
+                                    class="absolute top-12 right-4 text-gray-400 hover:text-primary transition-colors">
+                                <i class="fas fa-copy"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -240,7 +244,7 @@
                 <p class="text-gray-400 text-lg">深入了解所有功能和配置选项</p>
             </div>
             
-            <div class="grid lg:grid-cols-3 gap-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 w-full">
                 <div class="lg:col-span-2">
                     <div class="bg-dark-900 rounded-xl p-8">
                         <h3 class="text-2xl font-semibold mb-6">可用工具</h3>
