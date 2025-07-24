@@ -1,6 +1,6 @@
 {
   "id": "mcdr_mcp_service",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "MCDR MCP Service",
   "description": {
     "zh_cn": "为AI提供MCP协议接口的MCDR控制服务，支持实时日志监控、插件管理、服务器控制等功能",

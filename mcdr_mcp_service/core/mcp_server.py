@@ -420,6 +420,158 @@ class MCPServer:
                         "timestamp": {"type": "integer"}
                     }
                 }
+            },
+            {
+                "name": "search_logs",
+                "description": "搜索日志内容，支持文本搜索和正则表达式搜索",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "搜索查询字符串"
+                        },
+                        "use_regex": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "是否使用正则表达式搜索"
+                        },
+                        "context_lines": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10,
+                            "default": 0,
+                            "description": "包含搜索结果的上下文行数"
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5,
+                            "default": 5,
+                            "description": "最大返回结果数"
+                        }
+                    },
+                    "required": ["query"]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "query": {"type": "string"},
+                        "use_regex": {"type": "boolean"},
+                        "context_lines": {"type": "integer"},
+                        "total_matches": {"type": "integer"},
+                        "returned_results": {"type": "integer"},
+                        "remaining_results": {"type": "integer"},
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "search_id": {"type": "integer"},
+                                    "line_number": {"type": "integer"},
+                                    "content": {"type": "string"},
+                                    "timestamp": {"type": "string"},
+                                    "is_command": {"type": "boolean"},
+                                    "context_before": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "line_number": {"type": "integer"},
+                                                "content": {"type": "string"}
+                                            }
+                                        }
+                                    },
+                                    "context_after": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "line_number": {"type": "integer"},
+                                                "content": {"type": "string"}
+                                            }
+                                        }
+                                    },
+                                    "match_index": {"type": "integer"}
+                                }
+                            }
+                        },
+                        "timestamp": {"type": "integer"}
+                    }
+                }
+            },
+            {
+                "name": "search_logs_by_ids",
+                "description": "根据搜索ID范围查询日志",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "start_id": {
+                            "type": "integer",
+                            "description": "起始搜索ID"
+                        },
+                        "end_id": {
+                            "type": "integer",
+                            "description": "结束搜索ID"
+                        },
+                        "context_lines": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10,
+                            "default": 0,
+                            "description": "包含搜索结果的上下文行数"
+                        }
+                    },
+                    "required": ["start_id", "end_id"]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "start_id": {"type": "integer"},
+                        "end_id": {"type": "integer"},
+                        "context_lines": {"type": "integer"},
+                        "total_matches": {"type": "integer"},
+                        "returned_results": {"type": "integer"},
+                        "remaining_results": {"type": "integer"},
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "search_id": {"type": "integer"},
+                                    "line_number": {"type": "integer"},
+                                    "content": {"type": "string"},
+                                    "timestamp": {"type": "string"},
+                                    "is_command": {"type": "boolean"},
+                                    "context_before": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "line_number": {"type": "integer"},
+                                                "content": {"type": "string"}
+                                            }
+                                        }
+                                    },
+                                    "context_after": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "line_number": {"type": "integer"},
+                                                "content": {"type": "string"}
+                                            }
+                                        }
+                                    },
+                                    "match_index": {"type": "integer"}
+                                }
+                            }
+                        },
+                        "timestamp": {"type": "integer"}
+                    }
+                }
             }
         ]
         
@@ -583,6 +735,10 @@ class MCPServer:
             result = await self.command_handler.get_recent_logs(arguments)
         elif tool_name == "get_logs_range":
             result = await self.command_handler.get_logs_range(arguments)
+        elif tool_name == "search_logs":
+            result = await self.command_handler.search_logs(arguments)
+        elif tool_name == "search_logs_by_ids":
+            result = await self.command_handler.search_logs_by_ids(arguments)
         elif tool_name.startswith("mcdr_"):
             # 处理动态MCDR命令工具
             result = await self._handle_mcdr_command_tool(tool_name, arguments)

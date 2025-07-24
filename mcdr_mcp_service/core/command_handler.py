@@ -842,3 +842,314 @@ class CommandHandler:
                 "logs": []
             }
     
+    async def search_logs(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """搜索日志"""
+        query = arguments.get("query", "").strip()
+        use_regex = arguments.get("use_regex", False)
+        context_lines = arguments.get("context_lines", 0)
+        max_results = arguments.get("max_results", 5)
+        
+        if not query:
+            return {
+                "success": False,
+                "error": "搜索查询不能为空",
+                "results": []
+            }
+        
+        # 限制最大结果数和上下文行数
+        if max_results > 5:
+            max_results = 5
+        elif max_results <= 0:
+            max_results = 5
+            
+        if context_lines < 0:
+            context_lines = 0
+        elif context_lines > 10:
+            context_lines = 10
+        
+        try:
+            if not self.log_watcher:
+                return {
+                    "success": False,
+                    "error": "LogWatcher未初始化",
+                    "results": []
+                }
+            
+            # 在线程池中执行搜索
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self.executor,
+                self._search_logs_sync,
+                query,
+                use_regex,
+                context_lines,
+                max_results
+            )
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"搜索日志失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "results": []
+            }
+    
+    def _search_logs_sync(self, query: str, use_regex: bool, context_lines: int, max_results: int) -> Dict[str, Any]:
+        """同步搜索日志"""
+        try:
+            # 获取所有日志
+            all_logs = self.log_watcher.captured_logs.copy()
+            
+            # 编译搜索模式
+            if use_regex:
+                try:
+                    pattern = re.compile(query, re.IGNORECASE)
+                except re.error as e:
+                    return {
+                        "success": False,
+                        "error": f"正则表达式语法错误: {str(e)}",
+                        "results": []
+                    }
+            else:
+                # 简单文本搜索，不区分大小写
+                pattern = None
+                query_lower = query.lower()
+            
+            # 搜索匹配的日志行
+            matches = []
+            for i, log_line in enumerate(all_logs):
+                # 清理颜色代码后进行搜索
+                from mcdr_mcp_service.utils.log_watcher import clean_color_codes
+                clean_line = clean_color_codes(log_line)
+                
+                # 检查是否匹配
+                if use_regex:
+                    if pattern.search(clean_line):
+                        matches.append((i, log_line, clean_line))
+                else:
+                    if query_lower in clean_line.lower():
+                        matches.append((i, log_line, clean_line))
+            
+            # 按行号倒序排序（从新到老）
+            matches.sort(key=lambda x: x[0], reverse=True)
+            
+            total_matches = len(matches)
+            
+            # 限制结果数量
+            limited_matches = matches[:max_results]
+            
+            # 生成搜索结果
+            search_results = []
+            for match_idx, (line_idx, original_line, clean_line) in enumerate(limited_matches):
+                # 提取日志计数器ID（格式如 [#123]）
+                counter_match = re.search(r'\[#(\d+)\]', original_line)
+                search_id = int(counter_match.group(1)) if counter_match else line_idx
+                
+                # 提取时间戳
+                timestamp_match = re.search(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]', original_line)
+                timestamp = timestamp_match.group(1) if timestamp_match else None
+                
+                # 获取上下文行
+                context_before = []
+                context_after = []
+                
+                if context_lines > 0:
+                    # 获取前面的上下文行
+                    for ctx_idx in range(max(0, line_idx - context_lines), line_idx):
+                        if ctx_idx < len(all_logs):
+                            ctx_line = clean_color_codes(all_logs[ctx_idx])
+                            context_before.append({
+                                "line_number": ctx_idx,
+                                "content": ctx_line
+                            })
+                    
+                    # 获取后面的上下文行
+                    for ctx_idx in range(line_idx + 1, min(len(all_logs), line_idx + context_lines + 1)):
+                        if ctx_idx < len(all_logs):
+                            ctx_line = clean_color_codes(all_logs[ctx_idx])
+                            context_after.append({
+                                "line_number": ctx_idx,
+                                "content": ctx_line
+                            })
+                
+                # 检查是否是用户命令
+                is_command = "InfoSource.CONSOLE/INFO" in original_line and "!!" in original_line
+                
+                search_results.append({
+                    "search_id": search_id,
+                    "line_number": line_idx,
+                    "content": clean_line,
+                    "timestamp": timestamp,
+                    "is_command": is_command,
+                    "context_before": context_before,
+                    "context_after": context_after,
+                    "match_index": match_idx + 1  # 1-based index
+                })
+            
+            return {
+                "success": True,
+                "query": query,
+                "use_regex": use_regex,
+                "context_lines": context_lines,
+                "total_matches": total_matches,
+                "returned_results": len(search_results),
+                "remaining_results": max(0, total_matches - max_results),
+                "results": search_results,
+                "timestamp": int(time.time())
+            }
+            
+        except Exception as e:
+            self.logger.error(f"同步搜索日志失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "results": []
+            }
+    
+    async def search_logs_by_ids(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """根据搜索ID范围查询搜索结果"""
+        start_id = arguments.get("start_id")
+        end_id = arguments.get("end_id")
+        context_lines = arguments.get("context_lines", 0)
+        
+        if start_id is None or end_id is None:
+            return {
+                "success": False,
+                "error": "start_id和end_id都必须提供",
+                "results": []
+            }
+        
+        if start_id > end_id:
+            return {
+                "success": False,
+                "error": "start_id不能大于end_id",
+                "results": []
+            }
+        
+        # 限制上下文行数
+        if context_lines < 0:
+            context_lines = 0
+        elif context_lines > 10:
+            context_lines = 10
+        
+        try:
+            if not self.log_watcher:
+                return {
+                    "success": False,
+                    "error": "LogWatcher未初始化",
+                    "results": []
+                }
+            
+            # 在线程池中执行搜索
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                self.executor,
+                self._search_logs_by_ids_sync,
+                start_id,
+                end_id,
+                context_lines
+            )
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"根据ID搜索日志失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "results": []
+            }
+    
+    def _search_logs_by_ids_sync(self, start_id: int, end_id: int, context_lines: int) -> Dict[str, Any]:
+        """同步根据ID搜索日志"""
+        try:
+            # 获取所有日志
+            all_logs = self.log_watcher.captured_logs.copy()
+            
+            # 查找指定ID范围内的日志
+            matches = []
+            for i, log_line in enumerate(all_logs):
+                # 提取日志计数器ID（格式如 [#123]）
+                counter_match = re.search(r'\[#(\d+)\]', log_line)
+                if counter_match:
+                    log_id = int(counter_match.group(1))
+                    if start_id <= log_id <= end_id:
+                        # 清理颜色代码
+                        from mcdr_mcp_service.utils.log_watcher import clean_color_codes
+                        clean_line = clean_color_codes(log_line)
+                        matches.append((i, log_line, clean_line, log_id))
+            
+            # 按ID倒序排序（从新到老）
+            matches.sort(key=lambda x: x[3], reverse=True)
+            
+            total_matches = len(matches)
+            
+            # 限制结果数量为5个
+            limited_matches = matches[:5]
+            
+            # 生成搜索结果
+            search_results = []
+            for match_idx, (line_idx, original_line, clean_line, log_id) in enumerate(limited_matches):
+                # 提取时间戳
+                timestamp_match = re.search(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]', original_line)
+                timestamp = timestamp_match.group(1) if timestamp_match else None
+                
+                # 获取上下文行
+                context_before = []
+                context_after = []
+                
+                if context_lines > 0:
+                    # 获取前面的上下文行
+                    for ctx_idx in range(max(0, line_idx - context_lines), line_idx):
+                        if ctx_idx < len(all_logs):
+                            from mcdr_mcp_service.utils.log_watcher import clean_color_codes
+                            ctx_line = clean_color_codes(all_logs[ctx_idx])
+                            context_before.append({
+                                "line_number": ctx_idx,
+                                "content": ctx_line
+                            })
+                    
+                    # 获取后面的上下文行
+                    for ctx_idx in range(line_idx + 1, min(len(all_logs), line_idx + context_lines + 1)):
+                        if ctx_idx < len(all_logs):
+                            from mcdr_mcp_service.utils.log_watcher import clean_color_codes
+                            ctx_line = clean_color_codes(all_logs[ctx_idx])
+                            context_after.append({
+                                "line_number": ctx_idx,
+                                "content": ctx_line
+                            })
+                
+                # 检查是否是用户命令
+                is_command = "InfoSource.CONSOLE/INFO" in original_line and "!!" in original_line
+                
+                search_results.append({
+                    "search_id": log_id,
+                    "line_number": line_idx,
+                    "content": clean_line,
+                    "timestamp": timestamp,
+                    "is_command": is_command,
+                    "context_before": context_before,
+                    "context_after": context_after,
+                    "match_index": match_idx + 1  # 1-based index
+                })
+            
+            return {
+                "success": True,
+                "start_id": start_id,
+                "end_id": end_id,
+                "context_lines": context_lines,
+                "total_matches": total_matches,
+                "returned_results": len(search_results),
+                "remaining_results": max(0, total_matches - 5),
+                "results": search_results,
+                "timestamp": int(time.time())
+            }
+            
+        except Exception as e:
+            self.logger.error(f"同步根据ID搜索日志失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "results": []
+            }
+    
