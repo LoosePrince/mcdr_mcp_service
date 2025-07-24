@@ -19,28 +19,40 @@
 
 ## 安装与配置
 
-### 1. 安装依赖
+### 1. 获取插件源码
 
-确保你已经安装了必要的Python包：
+使用git克隆本仓库：
+
+```bash
+git clone https://github.com/LoosePrince/mcdr_mcp_service.git
+```
+
+### 2. 打包插件为MCDR可识别格式
+
+将 `mcdreforged.plugin.json` 和 `mcdr_mcp_service` 文件夹一起打包为zip压缩包，并将后缀名改为 `.mcdr`，例如：
+
+```bash
+zip -r mcdr_mcp_service.mcdr mcdreforged.plugin.json mcdr_mcp_service
+```
+
+### 3. 安装插件
+
+将生成的 `mcdr_mcp_service.mcdr` 文件放入你的MCDReforged插件目录（如 `plugins/` 文件夹）。
+
+### 4. 安装依赖
+
+进入MCDR环境，安装所需依赖：
 
 ```bash
 pip install websockets>=10.0 aiohttp>=3.8.0 pydantic>=1.10.0
 ```
 
-### 2. 安装插件
+### 5. 加载插件
 
-将 `mcdr_mcp_service` 文件夹复制到你的MCDR插件目录中：
-
-```bash
-cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
-```
-
-### 3. 重载插件
-
-在MCDR控制台中执行：
+在MCDR控制台执行：
 
 ```
-!!MCDR reload plugin mcdr_mcp_service
+!!MCDR plugin load mcdr_mcp_service.mcdr
 ```
 
 插件将在 `127.0.0.1:8765` 启动MCP服务器。
@@ -100,7 +112,7 @@ cp -r mcdr_mcp_service /path/to/your/mcdr/plugins/
 }
 ```
 
-#### 方法2：使用MCP桥接器
+#### 方法4：使用MCP桥接器
 
 提供了一个桥接脚本 `mcp_bridge.py`：
 
@@ -654,7 +666,7 @@ tail -f logs/latest.log | grep "mcdr_mcp_service"
 
 ## 更新日志
 
-### v1.1.0
+### v1.1.0（2025年7月25日）
 - 新增日志管理功能
   - `get_recent_logs`: 获取最近的服务器日志
   - `get_logs_range`: 获取指定范围的日志
@@ -664,7 +676,7 @@ tail -f logs/latest.log | grep "mcdr_mcp_service"
 - 支持日志上下文显示和结果排序
 - 增强配置项，添加日志相关安全控制
 
-### v1.0.0
+### v1.0.0（2025年7月24日）
 - 初始版本发布
 - 支持基础MCP协议
 - 实现命令树获取和命令执行功能

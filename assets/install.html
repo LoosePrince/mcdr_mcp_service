@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>安装配置 - MCDR MCP Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#8b5cf6',
+                        accent: '#06b6d4',
+                        dark: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-dark-900 text-gray-100">
+    <!-- 导航栏 -->
+    <nav class="fixed top-0 w-full z-50 transition-all duration-300" 
+         :class="isScrolled ? 'navbar-scroll' : 'bg-transparent'"
+         x-data="{ isMenuOpen: false, isScrolled: false }"
+         x-init="window.addEventListener('scroll', () => isScrolled = window.scrollY > 50)">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-cube text-primary text-2xl mr-3"></i>
+                    <span class="text-xl font-bold">MCDR MCP Service</span>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="index.html" class="nav-link text-gray-300 hover:text-primary transition-colors">首页</a>
+                    <a href="install.html" class="nav-link text-primary">安装配置</a>
+                    <a href="docs.html" class="nav-link text-gray-300 hover:text-primary transition-colors">文档</a>
+                    <a href="https://github.com/LoosePrince/mcdr_mcp_service" target="_blank" class="nav-link text-gray-300 hover:text-primary transition-colors"><i class="fab fa-github mr-1"></i>GitHub</a>
+                </div>
+                <button @click="isMenuOpen = !isMenuOpen" class="md:hidden text-gray-300 hover:text-primary">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+            </div>
+        </div>
+        <!-- 移动端菜单 -->
+        <div x-show="isMenuOpen" class="md:hidden bg-dark-800 border-t border-dark-700">
+            <div class="px-2 pt-2 pb-3 space-y-1">
+                <a href="index.html" class="block px-3 py-2 text-gray-300 hover:text-primary">首页</a>
+                <a href="install.html" class="block px-3 py-2 text-primary">安装配置</a>
+                <a href="docs.html" class="block px-3 py-2 text-gray-300 hover:text-primary">文档</a>
+                <a href="https://github.com/LoosePrince/mcdr_mcp_service" target="_blank" class="block px-3 py-2 text-gray-300 hover:text-primary"><i class="fab fa-github mr-1"></i>GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 英雄区域 -->
+    <section class="pt-24 pb-16 bg-gradient-to-br from-dark-900 via-dark-800 to-dark-900">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-6">
+                <span class="gradient-text bg-clip-text text-transparent">安装与配置</span>
+            </h1>
+            <p class="text-xl text-gray-400 max-w-3xl mx-auto">
+                按照步骤完成 MCDR MCP Service 的安装和配置，让 AI 开始管理您的 Minecraft 服务器
+            </p>
+        </div>
+    </section>
+
+    <!-- 安装进度 -->
+    <section class="py-16" x-data="installApp()">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="bg-dark-800 rounded-lg p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4">安装进度</h2>
+                <div class="w-full bg-dark-700 rounded-full h-2">
+                    <div class="progress-bar h-2 rounded-full transition-all duration-300" 
+                         :style="`width: ${getProgress()}%`"></div>
+                </div>
+                <p class="text-gray-400 mt-2" x-text="`${getCompletedSteps()}/${steps.length} 步骤完成`"></p>
+            </div>
+
+            <!-- 安装步骤 -->
+            <div class="space-y-6">
+                <template x-for="(step, index) in steps" :key="index">
+                    <div class="bg-dark-800 rounded-lg p-6 border-l-4 transition-all duration-300"
+                         :class="step.completed ? 'border-green-500' : 'border-gray-600'">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center mb-2">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center mr-3"
+                                         :class="step.completed ? 'bg-green-500' : 'bg-gray-600'">
+                                        <i class="fas fa-check text-sm" x-show="step.completed"></i>
+                                        <span x-show="!step.completed" x-text="index + 1"></span>
+                                    </div>
+                                    <h3 class="text-xl font-semibold" x-text="step.title"></h3>
+                                </div>
+                                <p class="text-gray-400 mb-4" x-text="step.description"></p>
+                                
+                                <!-- 代码块 -->
+                                <div class="code-block mb-4">
+                                    <pre><code x-text="step.command"></code></pre>
+                                    <button @click="copyToClipboard(step.command)" 
+                                            class="absolute top-12 right-4 text-gray-400 hover:text-primary transition-colors">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- 额外说明 -->
+                                <div class="text-sm text-gray-500" x-html="step.note"></div>
+                            </div>
+                            
+                            <button @click="toggleStep(index)" 
+                                    class="ml-4 px-4 py-2 rounded-lg transition-colors"
+                                    :class="step.completed ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'">
+                                <span x-text="step.completed ? '标记未完成' : '标记完成'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </section>
+
+    <!-- 在线配置生成器 -->
+    <section class="py-16 bg-dark-800" x-data="configGen()">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl font-bold text-center mb-12">在线配置生成器</h2>
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- 左侧：JSON预览 -->
+                <div class="bg-dark-900 rounded-lg p-6 flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xl font-semibold">配置预览</h3>
+                    </div>
+                    <div class="code-block mb-4">
+                        <pre><code x-text="formattedConfig"></code></pre>
+                        <button @click="copyConfig" 
+                                class="absolute top-12 right-4 text-gray-400 hover:text-primary transition-colors">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- 右侧：表单 -->
+                <div class="bg-dark-900 rounded-lg p-6 space-y-6">
+                    <h3 class="text-xl font-semibold mb-4">填写配置项</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">MCP 服务器地址</label>
+                            <input type="text" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model="form.mcp_server.host">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">MCP 端口</label>
+                            <input type="number" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model.number="form.mcp_server.port">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">最大连接数</label>
+                            <input type="number" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model.number="form.mcp_server.max_connections">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">启用 MCP 服务</label>
+                            <input type="checkbox" class="mr-2" x-model="form.mcp_server.enabled"> <span x-text="form.mcp_server.enabled ? '已启用' : '未启用'"></span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">API 密钥</label>
+                            <input type="text" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model="form.security.api_key">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">是否需要认证</label>
+                            <input type="checkbox" class="mr-2" x-model="form.security.require_authentication"> <span x-text="form.security.require_authentication ? '需要' : '不需要'"></span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">允许的IP（逗号分隔）</label>
+                            <input type="text" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model="allowed_ips_str" @input="updateAllowedIps">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">每分钟最大请求数</label>
+                            <input type="number" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model.number="form.security.rate_limit.requests_per_minute">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">每分钟最大命令数</label>
+                            <input type="number" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model.number="form.security.rate_limit.commands_per_minute">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">日志等级</label>
+                            <select class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model="form.logging.level">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARN">WARN</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">最大日志行数</label>
+                            <input type="number" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model.number="form.logging.max_log_lines">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">日志文件输出</label>
+                            <input type="checkbox" class="mr-2" x-model="form.logging.log_file_enabled"> <span x-text="form.logging.log_file_enabled ? '启用' : '关闭'"></span>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">功能开关</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label><input type="checkbox" class="mr-2" x-model="form.features.command_execution">命令执行</label>
+                                <label><input type="checkbox" class="mr-2" x-model="form.features.server_status">服务器状态</label>
+                                <label><input type="checkbox" class="mr-2" x-model="form.features.command_tree">命令树</label>
+                                <label><input type="checkbox" class="mr-2" x-model="form.features.mcdr_command_tools">MCDR命令工具</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">命令树最大深度</label>
+                            <input type="number" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model.number="form.features.command_tree_max_depth">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">危险命令（逗号分隔）</label>
+                            <input type="text" class="w-full bg-dark-800 border border-gray-600 rounded px-3 py-2" x-model="dangerous_cmds_str" @input="updateDangerousCmds">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- MCP连接代码生成器 -->
+        <div class="max-w-4xl mx-auto mt-16">
+            <h3 class="text-2xl font-bold mb-4 text-center">MCP连接代码生成器</h3>
+            <div class="bg-dark-900 rounded-lg p-6 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-lg font-semibold">AI客户端配置代码</span>
+                </div>
+                <div class="code-block mb-4">
+                    <pre><code x-text="mcpConnectCode"></code></pre>
+                    <button @click="copyMcpCode" 
+                            class="absolute top-12 right-4 text-gray-400 hover:text-primary transition-colors">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 故障排除 -->
+    <section class="py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl font-bold text-center mb-12">常见问题</h2>
+            
+            <div class="max-w-3xl mx-auto space-y-4">
+                <div class="bg-dark-800 rounded-lg p-6">
+                    <h3 class="text-lg font-semibold mb-2 text-red-400">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        插件无法加载
+                    </h3>
+                    <p class="text-gray-400 mb-2">可能原因：MCDReforged 版本过低</p>
+                    <p class="text-sm text-gray-500">解决方案：升级 MCDReforged 到 2.0 或更高版本</p>
+                </div>
+                
+                <div class="bg-dark-800 rounded-lg p-6">
+                    <h3 class="text-lg font-semibold mb-2 text-yellow-400">
+                        <i class="fas fa-network-wired mr-2"></i>
+                        MCP 连接失败
+                    </h3>
+                    <p class="text-gray-400 mb-2">可能原因：端口被占用或防火墙阻止</p>
+                    <p class="text-sm text-gray-500">解决方案：检查端口占用情况，开放防火墙端口</p>
+                </div>
+                
+                <div class="bg-dark-800 rounded-lg p-6">
+                    <h3 class="text-lg font-semibold mb-2 text-blue-400">
+                        <i class="fas fa-key mr-2"></i>
+                        API 认证失败
+                    </h3>
+                    <p class="text-gray-400 mb-2">可能原因：API 密钥配置错误</p>
+                    <p class="text-sm text-gray-500">解决方案：检查配置文件中的 API 密钥是否正确</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark-900 border-t border-dark-700 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div>
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-cube text-primary text-2xl mr-3"></i>
+                        <span class="text-xl font-bold">MCDR MCP Service</span>
+                    </div>
+                    <p class="text-gray-400">为MCDReforged提供AI驱动的服务器管理解决方案</p>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">快速链接</h4>
+                    <div class="space-y-2">
+                        <a href="index.html" class="block text-gray-400 hover:text-primary transition-colors">首页</a>
+                        <a href="install.html" class="block text-gray-400 hover:text-primary transition-colors">安装配置</a>
+                        <a href="docs.html" class="block text-gray-400 hover:text-primary transition-colors">文档</a>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">社区</h4>
+                    <div class="space-y-2">
+                        <a href="https://github.com/LoosePrince/mcdr_mcp_service" target="_blank" class="block text-gray-400 hover:text-primary transition-colors">
+                            <i class="fab fa-github mr-2"></i>GitHub
+                        </a>
+                        <a href="docs.html" class="block text-gray-400 hover:text-primary transition-colors">
+                            <i class="fas fa-book mr-2"></i>文档
+                        </a>
+                        <a href="https://github.com/LoosePrince/mcdr_mcp_service/issues" class="block text-gray-400 hover:text-primary transition-colors">
+                            <i class="fas fa-question-circle mr-2"></i>支持
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="border-t border-dark-700 mt-8 pt-8 text-center">
+                <p class="text-gray-400">&copy; 2025 MCDR MCP Service. 使用 MIT 许可证开源</p>
+                <p class="text-sm text-gray-500 mt-2">⚠️ 本插件目前仅为测试版本，请谨慎使用</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function installApp() {
+            return {
+                steps: [
+                    // 安装配置数据
+                    {
+                        step: 1,
+                        title: '获取插件源码',
+                        description: '使用 git 克隆插件源码',
+                        command: 'git clone https://github.com/LoosePrince/mcdr_mcp_service.git',
+                        completed: false
+                    },
+                    {
+                        step: 2,
+                        title: '打包插件',
+                        description: '将 mcdreforged.plugin.json 和 mcdr_mcp_service 文件夹一起打包为 zip 压缩包，并将后缀改为 .mcdr',
+                        command: '# 进入源码目录\ncd mcdr_mcp_service\n# 打包\nzip -r mcdr_mcp_service.mcdr mcdreforged.plugin.json mcdr_mcp_service',
+                        completed: false
+                    },
+                    {
+                        step: 3,
+                        title: '安装插件',
+                        description: '将 .mcdr 文件放入 MCDR 插件目录（如 plugins 文件夹）',
+                        command: '# 复制插件包到 MCDR 插件目录\ncopy mcdr_mcp_service.mcdr <你的MCDR目录>\\plugins\\',
+                        completed: false
+                    },
+                    {
+                        step: 4,
+                        title: '安装依赖',
+                        description: '安装插件所需的 Python 依赖包',
+                        command: 'pip install websockets>=10.0 aiohttp>=3.8.0 pydantic>=1.10.0',
+                        completed: false
+                    },
+                    {
+                        step: 5,
+                        title: '加载插件',
+                        description: '在 MCDR 控制台执行命令加载插件',
+                        command: '!!MCDR plugin load mcdr_mcp_service.mcdr',
+                        completed: false
+                    }
+                ],
+                
+                toggleStep(index) {
+                    this.steps[index].completed = !this.steps[index].completed;
+                },
+                
+                getProgress() {
+                    const completed = this.steps.filter(step => step.completed).length;
+                    return (completed / this.steps.length) * 100;
+                },
+                
+                getCompletedSteps() {
+                    return this.steps.filter(step => step.completed).length;
+                },
+                
+                copyToClipboard(text) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        const toast = document.createElement('div');
+                        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                        toast.textContent = '已复制到剪贴板';
+                        document.body.appendChild(toast);
+                        setTimeout(() => toast.remove(), 3000);
+                    });
+                }
+            }
+        }
+    </script>
+
+    <script>
+    function configGen() {
+        return {
+            form: {
+                mcp_server: {
+                    enabled: true,
+                    host: '127.0.0.1',
+                    port: 8765,
+                    max_connections: 5
+                },
+                security: {
+                    require_authentication: false,
+                    api_key: '',
+                    allowed_ips: ['127.0.0.1', '::1'],
+                    rate_limit: {
+                        requests_per_minute: 60,
+                        commands_per_minute: 30
+                    }
+                },
+                logging: {
+                    level: 'INFO',
+                    max_log_lines: 1000,
+                    log_file_enabled: true
+                },
+                features: {
+                    command_execution: true,
+                    server_status: true,
+                    command_tree: true,
+                    command_tree_max_depth: 3,
+                    mcdr_command_tools: true
+                },
+                dangerous_commands: [
+                    'stop',
+                    'restart',
+                    'reload',
+                    'exit',
+                    '!!MCDR stop',
+                    '!!MCDR plugin reloadall',
+                    '!!MCDR plugin reload mcdr_mcp_service',
+                    '!!MCDR plugin unload mcdr_mcp_service'
+                ]
+            },
+            get allowed_ips_str() {
+                return this.form.security.allowed_ips.join(', ');
+            },
+            set allowed_ips_str(val) {
+                this.form.security.allowed_ips = val.split(',').map(s => s.trim()).filter(Boolean);
+            },
+            updateAllowedIps(e) {
+                this.allowed_ips_str = e.target.value;
+            },
+            get dangerous_cmds_str() {
+                return this.form.dangerous_commands.join(', ');
+            },
+            set dangerous_cmds_str(val) {
+                this.form.dangerous_commands = val.split(',').map(s => s.trim()).filter(Boolean);
+            },
+            updateDangerousCmds(e) {
+                this.dangerous_cmds_str = e.target.value;
+            },
+            get formattedConfig() {
+                return JSON.stringify(this.form, null, 2);
+            },
+            copyConfig() {
+                navigator.clipboard.writeText(this.formattedConfig);
+            },
+            get mcpConnectCode() {
+                const host = this.form.mcp_server.host || '127.0.0.1';
+                const port = this.form.mcp_server.port || 8765;
+                const wsUrl = `ws://${host}:${port}`;
+                return JSON.stringify({
+                    mcpServers: {
+                        "mcdr-mcp-service": {
+                            command: "python",
+                            args: [
+                                "-c",
+                                `import asyncio,websockets,json,sys;exec('async def main():\\n  try:\\n    async with websockets.connect(\"${wsUrl}\") as ws:\\n      while True:\\n        try:\\n          line=input()\\n          if not line.strip():continue\\n          req=json.loads(line)\\n          await ws.send(json.dumps(req))\\n          resp=await ws.recv()\\n          print(resp)\\n          sys.stdout.flush()\\n        except EOFError:break\\n        except Exception as e:print(json.dumps({\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":None,\\\"error\\\":{\\\"code\\\":-32603,\\\"message\\\":str(e)}}))\\n  except Exception as e:print(json.dumps({\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":None,\\\"error\\\":{\\\"code\\\":-32603,\\\"message\\\":str(e)}}))\\nasyncio.run(main())')`
+                            ]
+                        }
+                    }
+                }, null, 2);
+            },
+            copyMcpCode() {
+                navigator.clipboard.writeText(this.mcpConnectCode);
+            }
+        }
+    }
+    </script>
+</body>
+</html>

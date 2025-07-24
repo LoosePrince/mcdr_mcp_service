@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCDR MCP Service - AI驱动的MCDR服务器管理</title>
+    <meta name="description" content="为MCDReforged提供Model Context Protocol服务接口的插件，让AI可以通过标准化协议控制和监控MCDR服务器">
+    
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Alpine.js -->
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#8b5cf6',
+                        accent: '#06b6d4',
+                        dark: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-dark-900 text-gray-100 min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="fixed top-0 w-full z-50 transition-all duration-300" 
+         :class="isScrolled ? 'navbar-scroll' : 'bg-transparent'"
+         x-data="{ isMenuOpen: false, isScrolled: false }"
+         x-init="window.addEventListener('scroll', () => isScrolled = window.scrollY > 50)">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-cube text-primary text-2xl mr-3"></i>
+                    <span class="text-xl font-bold">MCDR MCP Service</span>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="index.html" class="nav-link text-primary">首页</a>
+                    <a href="install.html" class="nav-link text-gray-300 hover:text-primary transition-colors">安装配置</a>
+                    <a href="docs.html" class="nav-link text-gray-300 hover:text-primary transition-colors">文档</a>
+                    <a href="https://github.com/LoosePrince/mcdr_mcp_service" target="_blank" class="nav-link text-gray-300 hover:text-primary transition-colors"><i class="fab fa-github mr-1"></i>GitHub</a>
+                </div>
+                <button @click="isMenuOpen = !isMenuOpen" class="md:hidden text-gray-300 hover:text-primary">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+            </div>
+        </div>
+        <!-- 移动端菜单 -->
+        <div x-show="isMenuOpen" class="md:hidden bg-dark-800 border-t border-dark-700">
+            <div class="px-2 pt-2 pb-3 space-y-1">
+                <a href="index.html" class="block px-3 py-2 text-primary">首页</a>
+                <a href="install.html" class="block px-3 py-2 text-gray-300 hover:text-primary">安装配置</a>
+                <a href="docs.html" class="block px-3 py-2 text-gray-300 hover:text-primary">文档</a>
+                <a href="https://github.com/LoosePrince/mcdr_mcp_service" target="_blank" class="block px-3 py-2 text-gray-300 hover:text-primary"><i class="fab fa-github mr-1"></i>GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 英雄区域 -->
+    <section id="home" class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20"></div>
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+            <div class="text-center">
+                <h1 class="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                    AI驱动的MCDR服务器管理
+                </h1>
+                <p class="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
+                    通过Model Context Protocol让AI智能体能够安全、高效地控制和监控您的Minecraft服务器
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="#install" class="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-lg font-semibold transition-all transform hover:scale-105">
+                        <i class="fas fa-rocket mr-2"></i>立即开始
+                    </a>
+                    <a href="docs.html" class="border border-primary text-primary hover:bg-primary/10 px-8 py-3 rounded-lg font-semibold transition-all">
+                        <i class="fas fa-book mr-2"></i>查看文档
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 功能特性 -->
+    <section class="py-20 bg-dark-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl font-bold mb-4">核心功能特性</h2>
+                <p class="text-gray-400 text-lg">为MCDR服务器提供全方位的AI管理解决方案</p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
+                    <div class="text-primary text-3xl mb-4">
+                        <i class="fas fa-rocket"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">基础MCP服务</h3>
+                    <p class="text-gray-400">支持标准MCP协议的WebSocket连接，提供稳定可靠的通信接口</p>
+                </div>
+                
+                <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
+                    <div class="text-secondary text-3xl mb-4">
+                        <i class="fas fa-terminal"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">命令执行</h3>
+                    <p class="text-gray-400">支持MCDR命令和Minecraft服务器命令的执行，智能子命令提示</p>
+                </div>
+                
+                <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
+                    <div class="text-accent text-3xl mb-4">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">状态监控</h3>
+                    <p class="text-gray-400">实时获取服务器和MCDR状态信息，包括在线玩家、插件状态等</p>
+                </div>
+                
+                <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
+                    <div class="text-primary text-3xl mb-4">
+                        <i class="fas fa-sitemap"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">命令树</h3>
+                    <p class="text-gray-400">获取完整的命令树和插件命令列表，支持按插件筛选</p>
+                </div>
+                
+                <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
+                    <div class="text-secondary text-3xl mb-4">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">日志管理</h3>
+                    <p class="text-gray-400">获取、搜索和管理服务器日志，支持文本和正则表达式搜索</p>
+                </div>
+                
+                <div class="bg-dark-900 p-6 rounded-xl border border-dark-700 hover:border-primary/50 transition-all">
+                    <div class="text-accent text-3xl mb-4">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">安全控制</h3>
+                    <p class="text-gray-400">IP白名单、命令权限控制、危险命令拦截，确保服务器安全</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 安装配置 -->
+    <section id="install" class="py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl font-bold mb-4">安装与配置</h2>
+                <p class="text-gray-400 text-lg">简单几步，快速部署您的AI管理服务器</p>
+            </div>
+            
+            <div class="grid lg:grid-cols-2 gap-12">
+                <div>
+                    <h3 class="text-2xl font-semibold mb-6">安装步骤</h3>
+                    <div class="space-y-6">
+                        <div class="flex items-start">
+                            <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 mt-1">1</div>
+                            <div>
+                                <h4 class="font-semibold mb-2">获取插件源码</h4>
+                                <code class="bg-dark-800 px-3 py-1 rounded text-sm">git clone https://github.com/LoosePrince/mcdr_mcp_service.git</code>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 mt-1">2</div>
+                            <div>
+                                <h4 class="font-semibold mb-2">打包插件</h4>
+                                <p class="text-gray-400 text-sm">将 <code class="bg-dark-800 px-2 py-1 rounded">mcdreforged.plugin.json</code> 和 <code class="bg-dark-800 px-2 py-1 rounded">mcdr_mcp_service</code> 文件夹一起打包为zip压缩包，并将后缀名改为 <code class="bg-dark-800 px-2 py-1 rounded">.mcdr</code>，如 <code class="bg-dark-800 px-2 py-1 rounded">mcdr_mcp_service.mcdr</code></p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 mt-1">3</div>
+                            <div>
+                                <h4 class="font-semibold mb-2">放入插件目录</h4>
+                                <p class="text-gray-400 text-sm">将 <code class="bg-dark-800 px-2 py-1 rounded">mcdr_mcp_service.mcdr</code> 文件放入你的MCDReforged插件目录（如 <code class="bg-dark-800 px-2 py-1 rounded">plugins/</code> 文件夹）</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 mt-1">4</div>
+                            <div>
+                                <h4 class="font-semibold mb-2">安装依赖</h4>
+                                <code class="bg-dark-800 px-3 py-1 rounded text-sm">pip install websockets&gt;=10.0 aiohttp&gt;=3.8.0 pydantic&gt;=1.10.0</code>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 mt-1">5</div>
+                            <div>
+                                <h4 class="font-semibold mb-2">加载插件</h4>
+                                <code class="bg-dark-800 px-3 py-1 rounded text-sm">!!MCDR plugin load mcdr_mcp_service.mcdr</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-2xl font-semibold mb-6">AI客户端连接</h3>
+                    <div class="bg-dark-800 rounded-lg p-6">
+                        <h4 class="font-semibold mb-3">推荐配置（WebSocket）</h4>
+                        <div class="code-block">
+                            <pre><code>{
+  "mcpServers": {
+    "mcdr-mcp-service": {
+      "command": "python",
+      "args": [
+        "-c", 
+        "import asyncio,websockets,json,sys;exec('async def main():\\n  try:\\n    async with websockets.connect(\"ws://127.0.0.1:8765\") as ws:\\n      while True:\\n        try:\\n          line=input()\\n          if not line.strip():continue\\n          req=json.loads(line)\\n          await ws.send(json.dumps(req))\\n          resp=await ws.recv()\\n          print(resp)\\n          sys.stdout.flush()\\n        except EOFError:break\\n        except Exception as e:print(json.dumps({\"jsonrpc\":\"2.0\",\"id\":None,\"error\":{\"code\":-32603,\"message\":str(e)}}))\\n  except Exception as e:print(json.dumps({\"jsonrpc\":\"2.0\",\"id\":None,\"error\":{\"code\":-32603,\"message\":str(e)}}))\\nasyncio.run(main())')"
+      ]
+    }
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 文档 -->
+    <section id="docs" class="py-20 bg-dark-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl font-bold mb-4">完整文档</h2>
+                <p class="text-gray-400 text-lg">深入了解所有功能和配置选项</p>
+            </div>
+            
+            <div class="grid lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2">
+                    <div class="bg-dark-900 rounded-xl p-8">
+                        <h3 class="text-2xl font-semibold mb-6">可用工具</h3>
+                        <div class="space-y-6">
+                            <div class="border-l-4 border-primary pl-4">
+                                <h4 class="font-semibold text-lg">get_command_tree</h4>
+                                <p class="text-gray-400 mb-2">获取MCDR可用命令列表和指令树</p>
+                                <code class="bg-dark-800 px-2 py-1 rounded text-sm">参数: plugin_id (可选)</code>
+                            </div>
+                            
+                            <div class="border-l-4 border-secondary pl-4">
+                                <h4 class="font-semibold text-lg">execute_command</h4>
+                                <p class="text-gray-400 mb-2">执行MCDR命令或Minecraft服务器命令</p>
+                                <code class="bg-dark-800 px-2 py-1 rounded text-sm">参数: command (必需), source_type (可选)</code>
+                            </div>
+                            
+                            <div class="border-l-4 border-accent pl-4">
+                                <h4 class="font-semibold text-lg">get_server_status</h4>
+                                <p class="text-gray-400 mb-2">获取MCDR服务器状态信息</p>
+                                <code class="bg-dark-800 px-2 py-1 rounded text-sm">参数: include_players (可选)</code>
+                            </div>
+                            
+                            <div class="border-l-4 border-primary pl-4">
+                                <h4 class="font-semibold text-lg">日志管理工具</h4>
+                                <p class="text-gray-400 mb-2">get_recent_logs, get_logs_range, search_logs, search_logs_by_ids</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="bg-dark-900 rounded-xl p-6">
+                        <h3 class="text-xl font-semibold mb-4">快速链接</h3>
+                        <div class="space-y-3">
+                            <a href="docs.html#troubleshooting" class="block text-primary hover:text-primary/80 transition-colors">
+                                <i class="fas fa-bug mr-2"></i>故障排除
+                            </a>
+                            <a href="https://github.com/LoosePrince/mcdr_mcp_service/blob/main/README.md" class="block text-primary hover:text-primary/80 transition-colors">
+                                <i class="fas fa-external-link-alt mr-2"></i>完整README
+                            </a>
+                            <a href="install.html" class="block text-primary hover:text-primary/80 transition-colors">
+                                <i class="fas fa-cog mr-2"></i>配置文档
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark-900 border-t border-dark-700 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div>
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-cube text-primary text-2xl mr-3"></i>
+                        <span class="text-xl font-bold">MCDR MCP Service</span>
+                    </div>
+                    <p class="text-gray-400">为MCDReforged提供AI驱动的服务器管理解决方案</p>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">快速链接</h4>
+                    <div class="space-y-2">
+                        <a href="index.html" class="block text-gray-400 hover:text-primary transition-colors">首页</a>
+                        <a href="install.html" class="block text-gray-400 hover:text-primary transition-colors">安装配置</a>
+                        <a href="docs.html" class="block text-gray-400 hover:text-primary transition-colors">文档</a>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-4">社区</h4>
+                    <div class="space-y-2">
+                        <a href="https://github.com/LoosePrince/mcdr_mcp_service" target="_blank" class="block text-gray-400 hover:text-primary transition-colors">
+                            <i class="fab fa-github mr-2"></i>GitHub
+                        </a>
+                        <a href="docs.html" class="block text-gray-400 hover:text-primary transition-colors">
+                            <i class="fas fa-book mr-2"></i>文档
+                        </a>
+                        <a href="https://github.com/LoosePrince/mcdr_mcp_service/issues" class="block text-gray-400 hover:text-primary transition-colors">
+                            <i class="fas fa-question-circle mr-2"></i>支持
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="border-t border-dark-700 mt-8 pt-8 text-center">
+                <p class="text-gray-400">&copy; 2025 MCDR MCP Service. 使用 MIT 许可证开源</p>
+                <p class="text-sm text-gray-500 mt-2">⚠️ 本插件目前仅为测试版本，请谨慎使用</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
