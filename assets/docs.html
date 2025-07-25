@@ -137,11 +137,11 @@
                         <!-- get_command_tree -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_command_tree</h3>
-                            <p class="text-gray-400 mb-2">获取 MCDR 可用命令列表和指令树</p>
+                            <p class="text-gray-400 mb-2">获取MCDR可用命令列表和指令树</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">参数</h4>
                                 <ul class="text-sm text-gray-500 space-y-1">
-                                    <li><code>plugin_id</code> (可选): 指定插件ID</li>
+                                    <li><code>plugin_id</code> (可选): 指定插件ID以获取特定插件的命令</li>
                                 </ul>
                             </div>
                             <div class="mb-4">
@@ -151,45 +151,131 @@
   "arguments": {}
 }</code></pre></div>
                             </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">带参数示例</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "name": "get_command_tree",
+  "arguments": {
+    "plugin_id": "mcdr_mcp_service"
+  }
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "total_commands": 15,
+  "commands": [
+    {
+      "plugin_id": "mcdr",
+      "plugin_name": "MCDReforged Core",
+      "command": "!!MCDR status",
+      "description": "查看MCDR状态",
+      "type": "builtin_command"
+    },
+    // 更多命令...
+  ],
+  "timestamp": 1753261523
+}</code></pre></div>
+                            </div>
                         </div>
 
                         <!-- execute_command -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">execute_command</h3>
-                            <p class="text-gray-400 mb-2">执行 MCDR 或 Minecraft 服务器命令，并捕获响应</p>
+                            <p class="text-gray-400 mb-2">执行MCDR命令或Minecraft服务器命令，并捕获真实的命令响应</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">参数</h4>
                                 <ul class="text-sm text-gray-500 space-y-1">
-                                    <li><code>command</code> (必需): 要执行的命令</li>
-                                    <li><code>source_type</code> (可选): 命令来源类型（console/player）</li>
+                                    <li><code>command</code> (必需): 要执行的命令，支持以下格式：<br>
+                                        - MCDR命令：以<code>!!</code>开头，如<code>!!MCDR status</code><br>
+                                        - Minecraft命令：可以带或不带<code>/</code>前缀，如<code>/list</code>或<code>list</code></li>
+                                    <li><code>source_type</code> (可选): 命令来源类型，可选值：<br>
+                                        - <code>"console"</code> (默认): 以控制台身份执行<br>
+                                        - <code>"player"</code>: 以玩家身份执行</li>
+                                </ul>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">特性</h4>
+                                <ul class="text-sm text-gray-500 space-y-1">
+                                    <li><b>智能子命令提示</b>: 当执行的命令返回"未知命令"时，系统会自动查找并返回该命令的所有可用子命令</li>
+                                    <li><b>友好错误处理</b>: 对于无效命令，会提供有用的错误信息和建议</li>
                                 </ul>
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
-  "name": "execute_command",
+  "name": "execute_command", 
   "arguments": {
-    "command": "!!MCDR status"
+    "command": "!!MCDR status",
+    "source_type": "console"
   }
 }</code></pre></div>
                             </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">Minecraft命令示例</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "name": "execute_command", 
+  "arguments": {
+    "command": "/list"
+  }
+}</code></pre></div>
                             </div>
-                            
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "command": "!!MCDR status",
+  "command_id": "cmd_1753261523_1234",
+  "output": "MCDR 服务器状态信息的完整响应内容...",
+  "responses": ["第一行响应", "第二行响应", "..."],
+  "timestamp": 1753261523
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">未知命令响应示例</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "command": "!!MCDR unknown",
+  "command_id": "cmd_1753261523_5678",
+  "output": "未知命令: !!MCDR unknown\n当前命令没有返回值，以下是它的子命令:\n!!MCDR status - 查看MCDR状态\n!!MCDR help - 显示帮助信息\n...\n工具 mcdr_unknown 可能需要更多参数，请尝试使用 !!MCDR help 获取帮助",
+  "timestamp": 1753261523
+}</code></pre></div>
+                            </div>
+                        </div>
+
                         <!-- get_server_status -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_server_status</h3>
-                            <p class="text-gray-400 mb-2">获取 MCDR 服务器状态信息</p>
+                            <p class="text-gray-400 mb-2">获取MCDR服务器状态信息</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">参数</h4>
                                 <ul class="text-sm text-gray-500 space-y-1">
-                                    <li><code>include_players</code> (可选): 是否包含在线玩家信息</li>
+                                    <li><code>include_players</code> (可选): 是否包含在线玩家信息，默认为<code>true</code></li>
                                 </ul>
-                                </div>
+                            </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_server_status",
-  "arguments": {}
+  "arguments": {
+    "include_players": true
+  }
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "timestamp": 1753261523,
+  "mcdr_status": "running",
+  "mcdr_status_detail": "MCDR 版本: 2.x.x\n...",
+  "server_running": true,
+  "server_startup": true,
+  "plugin_list_detail": "已加载的插件: xxx, xxx, ...",
+  "players": {
+    "list_command_result": "当前有 3 名玩家在线: player1, player2, player3"
+  }
 }</code></pre></div>
                             </div>
                         </div>
@@ -197,38 +283,85 @@
                         <!-- get_recent_logs -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_recent_logs</h3>
-                            <p class="text-gray-400 mb-2">获取最近的服务器日志</p>
+                            <p class="text-gray-400 mb-2">获取最近的服务器日志（支持MCDR和Minecraft日志）</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">参数</h4>
                                 <ul class="text-sm text-gray-500 space-y-1">
-                                    <li><code>lines_count</code> (可选): 获取的日志行数</li>
+                                    <li><code>lines_count</code> (可选): 要获取的日志行数，范围1-50，默认为20</li>
                                 </ul>
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_recent_logs",
-  "arguments": {"lines_count": 20}
+  "arguments": {
+    "lines_count": 30
+  }
 }</code></pre></div>
-                                </div>
                             </div>
-                            
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "total_lines": 1250,
+  "requested_lines": 30,
+  "returned_lines": 30,
+  "logs": [
+    {
+      "line_number": 1220,
+      "content": "[2025-01-20 15:30:25] [MCDR/INFO] 玩家加入游戏",
+      "timestamp": "2025-01-20 15:30:25",
+      "source": "all",
+      "is_command": false
+    },
+    // 更多日志...
+  ],
+  "timestamp": 1753261523
+}</code></pre></div>
+                            </div>
+                        </div>
+
                         <!-- get_logs_range -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">get_logs_range</h3>
-                            <p class="text-gray-400 mb-2">获取指定范围的服务器日志</p>
+                            <p class="text-gray-400 mb-2">获取指定范围的服务器日志（支持MCDR和Minecraft日志）</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">参数</h4>
                                 <ul class="text-sm text-gray-500 space-y-1">
-                                    <li><code>start_line</code> (可选): 起始行号</li>
-                                    <li><code>end_line</code> (必需): 结束行号</li>
+                                    <li><code>start_line</code> (可选): 起始行号（从0开始），默认为0</li>
+                                    <li><code>end_line</code> (必需): 结束行号（不包含），最多获取50行</li>
                                 </ul>
-                                </div>
+                            </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "get_logs_range",
-  "arguments": {"start_line": 100, "end_line": 150}
+  "arguments": {
+    "start_line": 100,
+    "end_line": 150
+  }
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "total_lines": 1250,
+  "start_line": 100,
+  "end_line": 150,
+  "requested_lines": 50,
+  "returned_lines": 50,
+  "logs": [
+    {
+      "line_number": 100,
+      "content": "[2025-01-20 15:25:10] [SERVER/INFO] 服务器启动完成",
+      "timestamp": "2025-01-20 15:25:10",
+      "source": "all",
+      "is_command": false
+    },
+    // 更多日志...
+  ],
+  "timestamp": 1753261523
 }</code></pre></div>
                             </div>
                         </div>
@@ -236,21 +369,89 @@
                         <!-- search_logs -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
                             <h3 class="text-xl font-semibold mb-4 text-primary">search_logs</h3>
-                            <p class="text-gray-400 mb-2">搜索日志内容，支持文本和正则表达式</p>
+                            <p class="text-gray-400 mb-2">搜索日志内容，支持文本搜索和正则表达式搜索</p>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">参数</h4>
                                 <ul class="text-sm text-gray-500 space-y-1">
-                                    <li><code>query</code> (必需): 搜索内容</li>
-                                    <li><code>use_regex</code> (可选): 是否使用正则</li>
-                                    <li><code>context_lines</code> (可选): 上下文行数</li>
-                                    <li><code>max_results</code> (可选): 最大返回数</li>
+                                    <li><code>query</code> (必需): 搜索查询字符串</li>
+                                    <li><code>use_regex</code> (可选): 是否使用正则表达式搜索，默认为false</li>
+                                    <li><code>context_lines</code> (可选): 包含搜索结果的上下文行数，范围0-10，默认为0</li>
+                                    <li><code>max_results</code> (可选): 最大返回结果数，范围1-5，默认为5</li>
                                 </ul>
                             </div>
                             <div class="mb-4">
-                                <h4 class="font-semibold mb-2">请求示例</h4>
+                                <h4 class="font-semibold mb-2">特性</h4>
+                                <ul class="text-sm text-gray-500 space-y-1">
+                                    <li><b>智能搜索</b>: 支持文本搜索和正则表达式搜索</li>
+                                    <li><b>上下文显示</b>: 可显示搜索结果前后的上下文行</li>
+                                    <li><b>结果排序</b>: 按时间从新到老排序</li>
+                                    <li><b>搜索ID</b>: 每个结果都有唯一的搜索ID用于后续查询</li>
+                                </ul>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">文本搜索示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "search_logs",
-  "arguments": {"query": "玩家登录", "context_lines": 2}
+  "arguments": {
+    "query": "玩家登录",
+    "context_lines": 2
+  }
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">正则表达式搜索示例</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "name": "search_logs",
+  "arguments": {
+    "query": "\\[ERROR\\].*exception",
+    "use_regex": true,
+    "context_lines": 3,
+    "max_results": 3
+  }
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "query": "玩家登录",
+  "use_regex": false,
+  "context_lines": 2,
+  "total_matches": 15,
+  "returned_results": 5,
+  "remaining_results": 10,
+  "results": [
+    {
+      "search_id": 1245,
+      "line_number": 1220,
+      "content": "[2025-01-20 15:30:25] [SERVER/INFO] 玩家 Steve 登录游戏",
+      "timestamp": "2025-01-20 15:30:25",
+      "is_command": false,
+      "context_before": [
+        {
+          "line_number": 1218,
+          "content": "[2025-01-20 15:30:23] [SERVER/INFO] 服务器正在运行"
+        },
+        {
+          "line_number": 1219,
+          "content": "[2025-01-20 15:30:24] [SERVER/INFO] 准备接受连接"
+        }
+      ],
+      "context_after": [
+        {
+          "line_number": 1221,
+          "content": "[2025-01-20 15:30:26] [SERVER/INFO] Steve 获得了成就"
+        },
+        {
+          "line_number": 1222,
+          "content": "[2025-01-20 15:30:27] [SERVER/INFO] 世界保存完成"
+        }
+      ],
+      "match_index": 1
+    },
+    // 更多搜索结果...
+  ],
+  "timestamp": 1753261523
 }</code></pre></div>
                             </div>
                         </div>
@@ -264,27 +465,116 @@
                                 <ul class="text-sm text-gray-500 space-y-1">
                                     <li><code>start_id</code> (必需): 起始搜索ID</li>
                                     <li><code>end_id</code> (必需): 结束搜索ID</li>
-                                    <li><code>context_lines</code> (可选): 上下文行数</li>
+                                    <li><code>context_lines</code> (可选): 包含搜索结果的上下文行数，范围0-10，默认为0</li>
+                                </ul>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">特性</h4>
+                                <ul class="text-sm text-gray-500 space-y-1">
+                                    <li><b>ID范围查询</b>: 基于日志的唯一搜索ID进行范围查询</li>
+                                    <li><b>结果限制</b>: 最多返回5个结果，按ID从新到老排序</li>
+                                    <li><b>剩余提示</b>: 显示范围内剩余的结果数量</li>
                                 </ul>
                             </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">请求示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "search_logs_by_ids",
-  "arguments": {"start_id": 1200, "end_id": 1250, "context_lines": 1}
+  "arguments": {
+    "start_id": 1200,
+    "end_id": 1250,
+    "context_lines": 1
+  }
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "start_id": 1200,
+  "end_id": 1250,
+  "context_lines": 1,
+  "total_matches": 51,
+  "returned_results": 5,
+  "remaining_results": 46,
+  "results": [
+    {
+      "search_id": 1250,
+      "line_number": 1230,
+      "content": "[2025-01-20 15:35:00] [MCDR/INFO] 插件重载完成",
+      "timestamp": "2025-01-20 15:35:00",
+      "is_command": true,
+      "context_before": [
+        {
+          "line_number": 1229,
+          "content": "[2025-01-20 15:34:59] [MCDR/INFO] 正在重载插件"
+        }
+      ],
+      "context_after": [
+        {
+          "line_number": 1231,
+          "content": "[2025-01-20 15:35:01] [MCDR/INFO] 重载完成"
+        }
+      ],
+      "match_index": 1
+    },
+    // 更多搜索结果...
+  ],
+  "timestamp": 1753261523
 }</code></pre></div>
                             </div>
                         </div>
 
                         <!-- MCDR自带命令工具 -->
                         <div class="bg-dark-800 rounded-lg p-6 mb-6">
-                            <h3 class="text-xl font-semibold mb-4 text-primary">MCDR 自带命令工具</h3>
-                            <p class="text-gray-400 mb-2">将 MCDR 自带命令（如 <code>!!MCDR status</code>）自动映射为独立工具，便于 AI 直接调用。</p>
+                            <h3 class="text-xl font-semibold mb-4 text-primary">MCDR自带命令工具</h3>
+                            <p class="text-gray-400 mb-2">插件会自动将MCDR自带的命令（以<code>!!MCDR</code>开头）转换为独立的MCP工具，使AI可以直接调用这些命令，而无需使用<code>execute_command</code>工具。</p>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">工具命名规则</h4>
+                                <ul class="text-sm text-gray-500 space-y-1">
+                                    <li>工具名称格式：<code>mcdr_命令名称</code>，其中命令名称是将<code>!!MCDR</code>后面的部分转换而来</li>
+                                    <li>空格会被替换为下划线，特殊字符会被移除</li>
+                                </ul>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">特性</h4>
+                                <ul class="text-sm text-gray-500 space-y-1">
+                                    <li><b>自动命令映射</b>: 自动将MCDR命令映射为独立工具</li>
+                                    <li><b>智能子命令提示</b>: 当命令返回"未知命令"时，自动提供子命令列表</li>
+                                    <li><b>命令缓存</b>: 使用命令映射缓存，提高性能</li>
+                                </ul>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">示例工具</h4>
+                                <ul class="text-sm text-gray-500 space-y-1">
+                                    <li><code>mcdr_status</code>: 对应<code>!!MCDR status</code>命令</li>
+                                    <li><code>mcdr_plugin_list</code>: 对应<code>!!MCDR plugin list</code>命令</li>
+                                    <li><code>mcdr_reload_plugin</code>: 对应<code>!!MCDR reload plugin</code>命令</li>
+                                </ul>
+                            </div>
                             <div class="mb-4">
                                 <h4 class="font-semibold mb-2">调用示例</h4>
                                 <div class="code-block min-w-0 max-w-full"><pre><code>{
   "name": "mcdr_status",
   "arguments": {}
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">响应格式</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "command": "!!MCDR status",
+  "output": "MCDR 版本: 2.x.x\n服务器状态: 运行中\n...",
+  "timestamp": 1753261523
+}</code></pre></div>
+                            </div>
+                            <div class="mb-4">
+                                <h4 class="font-semibold mb-2">未知命令响应示例</h4>
+                                <div class="code-block min-w-0 max-w-full"><pre><code>{
+  "success": true,
+  "command": "!!MCDR unknown",
+  "output": "未知命令: !!MCDR unknown\n当前命令没有返回值，以下是它的子命令:\n!!MCDR status - 查看MCDR状态\n!!MCDR help - 显示帮助信息\n...\n工具 mcdr_unknown 可能需要更多参数，请尝试使用 !!MCDR help 获取帮助",
+  "timestamp": 1753261523
 }</code></pre></div>
                             </div>
                         </div>
