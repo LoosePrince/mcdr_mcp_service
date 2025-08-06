@@ -27,7 +27,7 @@
     "server_status": true,
     "command_tree": true,
     "command_tree_max_depth": 3,
-    "mcdr_command_tools": true
+    "command_tools": true
   },
   "dangerous_commands": [
     "stop",

@@ -6,10 +6,14 @@ MCDR MCP Service Plugin
 import asyncio
 import threading
 import json
+import socket
+import time
+import gc
 from pathlib import Path
 from typing import Dict, Any
 
 from mcdreforged.api.all import *
+import websockets
 
 from .core.mcp_server import MCPServer
 from .core.command_handler import CommandHandler
@@ -20,6 +24,8 @@ mcp_server_instance = None
 mcp_server_thread = None
 stop_server_event = None
 log_watcher_instance = None
+websocket_server = None
+connected_clients = set()
 
 
 def on_load(server: PluginServerInterface, old):
@@ -74,6 +80,9 @@ def load_config(server: PluginServerInterface, config_path: Path) -> Dict[str, A
         },
         "logging": {
             "level": "INFO"
+        },
+        "features": {
+            "mcdr_command_tools": True
         }
     }
     
@@ -106,12 +115,14 @@ def start_mcp_server(server: PluginServerInterface, config: Dict[str, Any]):
     # 先停止现有的服务器实例（如果有）
     if mcp_server_instance is not None:
         try:
-            mcp_server_instance.stop_sync()
+            stop_mcp_server_sync(server)
         except:
             pass
         mcp_server_instance = None
         mcp_server_thread = None
         stop_server_event = None
+        websocket_server = None
+        connected_clients.clear()
     
     if not config["mcp_server"]["enabled"]:
         server.logger.info("MCP服务器已禁用")
@@ -178,7 +189,7 @@ def start_mcp_server(server: PluginServerInterface, config: Dict[str, Any]):
             async def server_main():
                 # 启动服务器
                 try:
-                    await mcp_server_instance.start()
+                    await start_mcp_server_async(server, config)
                 except Exception as e:
                     if not stop_server_event.is_set():  # 只有在非主动停止时才记录错误
                         server.logger.error(f"MCP服务器运行时出错: {e}")
@@ -235,6 +246,38 @@ def start_mcp_server(server: PluginServerInterface, config: Dict[str, Any]):
         server.logger.error(f"启动MCP服务器失败: {e}")
 
 
+async def start_mcp_server_async(server: PluginServerInterface, config: Dict[str, Any]):
+    """异步启动MCP服务器"""
+    global websocket_server
+    
+    host = config["mcp_server"]["host"]
+    port = config["mcp_server"]["port"]
+    
+    try:
+        # 临时抑制一些 websockets 的日志
+        import logging
+        websockets_logger = logging.getLogger('websockets.server')
+        original_ws_level = websockets_logger.level
+        
+        websocket_server = await websockets.serve(
+            mcp_server_instance.handle_client,
+            host,
+            port,
+            max_size=1024*1024,  # 1MB max message size
+            ping_interval=20,
+            ping_timeout=10
+        )
+        
+        server.logger.info(f"MCP WebSocket服务器启动成功，监听 {host}:{port}")
+        
+        # 保持服务器运行
+        await websocket_server.wait_closed()
+        
+    except Exception as e:
+        server.logger.error(f"MCP服务器启动失败: {e}")
+        raise
+
+
 def stop_mcp_server(server: PluginServerInterface):
     """停止MCP服务器"""
     global mcp_server_instance, mcp_server_thread, stop_server_event
@@ -246,7 +289,7 @@ def stop_mcp_server(server: PluginServerInterface):
     if mcp_server_instance:
         try:
             # 使用同步方法停止服务器
-            mcp_server_instance.stop_sync()
+            stop_mcp_server_sync(server)
             
             # 确保线程已停止
             if mcp_server_thread and mcp_server_thread.is_alive():
@@ -266,10 +309,91 @@ def stop_mcp_server(server: PluginServerInterface):
             
             # 尝试进行垃圾回收
             try:
-                import gc
                 gc.collect()
             except Exception:
-                pass 
+                pass
+
+
+async def stop_mcp_server_async(server: PluginServerInterface = None):
+    """异步停止MCP服务器"""
+    global websocket_server, connected_clients
+    
+    if websocket_server:
+        try:
+            # 关闭所有连接的客户端
+            if connected_clients:
+                await asyncio.gather(
+                    *[client.close() for client in connected_clients.copy()],
+                    return_exceptions=True
+                )
+                connected_clients.clear()
+            
+            # 关闭服务器
+            websocket_server.close()
+            await websocket_server.wait_closed()
+            websocket_server = None
+        except Exception as e:
+            if server:
+                server.logger.error(f"停止MCP服务器时出错: {e}")
+            else:
+                print(f"停止MCP服务器时出错: {e}")
+
+
+def stop_mcp_server_sync(server: PluginServerInterface):
+    """同步停止MCP服务器（用于插件卸载）"""
+    global websocket_server, connected_clients
+    
+    if websocket_server:
+        try:
+            # 清空客户端连接（不尝试异步关闭）
+            connected_clients.clear()
+            
+            # 关闭服务器
+            websocket_server.close()
+            
+            # 等待端口真正释放 - 使用默认值，因为配置可能不可用
+            host = "127.0.0.1"
+            port = 8765
+            
+            # 检查端口是否释放的函数
+            def is_port_free():
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.1)
+                        result = s.connect_ex((host, port))
+                        return result != 0  # 如果连接失败，说明端口已释放
+                except Exception:
+                    return True  # 如果出现异常，假设端口已释放
+            
+            # 等待端口释放，最多等待5秒
+            max_wait_time = 5.0
+            wait_interval = 0.1
+            total_waited = 0.0
+            
+            while total_waited < max_wait_time:
+                if is_port_free():
+                    break
+                time.sleep(wait_interval)
+                total_waited += wait_interval
+            
+            if not is_port_free():
+                server.logger.warning(f"端口 {port} 可能仍被占用，但继续执行卸载")
+            
+            # 标记为已关闭
+            websocket_server = None
+            
+            server.logger.info("MCP服务器已同步停止")
+        except Exception as e:
+            server.logger.error(f"同步停止MCP服务器时出错: {e}")
+            # 即使出错也要清理状态
+            websocket_server = None
+            connected_clients.clear()
+            
+        # 确保所有资源都被释放
+        try:
+            gc.collect()
+        except Exception:
+            pass 
 
 
 def setup_log_filters(server: PluginServerInterface):

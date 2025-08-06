@@ -12,6 +12,13 @@ from typing import Dict, Any, List, Optional
 from websockets.server import WebSocketServerProtocol
 
 from mcdreforged.api.all import PluginServerInterface
+from .tool_definitions import (
+    get_mcp_tools, 
+    get_default_mcdr_commands, 
+    extract_mcdr_subcommand,
+    create_mcdr_tool_definition,
+    get_default_mcdr_tools
+)
 
 
 class MCPServer:
@@ -21,118 +28,10 @@ class MCPServer:
         self.server = server_interface
         self.command_handler = command_handler
         self.config = config
-        self.websocket_server = None
-        self.connected_clients = set()
         
         # 设置日志
         self.logger = server_interface.logger
         
-    async def start(self):
-        """启动MCP服务器"""
-        host = self.config["mcp_server"]["host"]
-        port = self.config["mcp_server"]["port"]
-        
-        try:
-            # 临时抑制一些 websockets 的日志
-            import logging
-            websockets_logger = logging.getLogger('websockets.server')
-            original_ws_level = websockets_logger.level
-            
-            self.websocket_server = await websockets.serve(
-                self.handle_client,
-                host,
-                port,
-                max_size=1024*1024,  # 1MB max message size
-                ping_interval=20,
-                ping_timeout=10
-            )
-            
-            self.logger.info(f"MCP WebSocket服务器启动成功，监听 {host}:{port}")
-            
-            # 保持服务器运行
-            await self.websocket_server.wait_closed()
-            
-        except Exception as e:
-            self.logger.error(f"MCP服务器启动失败: {e}")
-            raise
-    
-    async def stop(self):
-        """停止MCP服务器"""
-        if self.websocket_server:
-            try:
-                # 关闭所有连接的客户端
-                if self.connected_clients:
-                    await asyncio.gather(
-                        *[client.close() for client in self.connected_clients.copy()],
-                        return_exceptions=True
-                    )
-                    self.connected_clients.clear()
-                
-                # 关闭服务器
-                self.websocket_server.close()
-                await self.websocket_server.wait_closed()
-                self.websocket_server = None
-                self.logger.info("MCP服务器已停止")
-            except Exception as e:
-                self.logger.error(f"停止MCP服务器时出错: {e}")
-    
-    def stop_sync(self):
-        """同步停止MCP服务器（用于插件卸载）"""
-        if self.websocket_server:
-            try:
-                # 清空客户端连接（不尝试异步关闭）
-                self.connected_clients.clear()
-                
-                # 关闭服务器
-                self.websocket_server.close()
-                
-                # 等待端口真正释放
-                import socket
-                import time
-                host = self.config["mcp_server"]["host"]
-                port = self.config["mcp_server"]["port"]
-                
-                # 检查端口是否释放的函数
-                def is_port_free():
-                    try:
-                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                            s.settimeout(0.1)
-                            result = s.connect_ex((host, port))
-                            return result != 0  # 如果连接失败，说明端口已释放
-                    except Exception:
-                        return True  # 如果出现异常，假设端口已释放
-                
-                # 等待端口释放，最多等待5秒
-                max_wait_time = 5.0
-                wait_interval = 0.1
-                total_waited = 0.0
-                
-                while total_waited < max_wait_time:
-                    if is_port_free():
-                        break
-                    time.sleep(wait_interval)
-                    total_waited += wait_interval
-                
-                if not is_port_free():
-                    self.logger.warning(f"端口 {port} 可能仍被占用，但继续执行卸载")
-                
-                # 标记为已关闭
-                self.websocket_server = None
-                
-                self.logger.info("MCP服务器已同步停止")
-            except Exception as e:
-                self.logger.error(f"同步停止MCP服务器时出错: {e}")
-                # 即使出错也要清理状态
-                self.websocket_server = None
-                self.connected_clients.clear()
-                
-            # 确保所有资源都被释放
-            try:
-                import gc
-                gc.collect()
-            except Exception:
-                pass
-    
     async def handle_client(self, websocket: WebSocketServerProtocol, path: str = None):
         """处理客户端连接"""
         client_address = websocket.remote_address
@@ -144,7 +43,9 @@ class MCPServer:
             await websocket.close(code=1008, reason="IP not allowed")
             return
         
-        self.connected_clients.add(websocket)
+        # 将客户端添加到全局连接集合中
+        import mcdr_mcp_service
+        mcdr_mcp_service.connected_clients.add(websocket)
         
         try:
             async for message in websocket:
@@ -179,7 +80,9 @@ class MCPServer:
         except Exception as e:
             self.logger.error(f"处理客户端连接时出错: {e}")
         finally:
-            self.connected_clients.discard(websocket)
+            # 从全局连接集合中移除客户端
+            import mcdr_mcp_service
+            mcdr_mcp_service.connected_clients.discard(websocket)
     
     def _check_ip_allowed(self, ip: str) -> bool:
         """检查IP是否在白名单中"""
@@ -235,349 +138,12 @@ class MCPServer:
     
     async def _handle_tools_list(self, request_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """处理tools/list请求"""
-        tools = [
-            {
-                "name": "get_command_tree",
-                "description": "获取MCDR可用命令列表和指令树",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "plugin_id": {
-                            "type": "string",
-                            "description": "指定插件ID以获取特定插件的命令（可选）"
-                        }
-                    }
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "total_commands": {"type": "integer"},
-                        "commands": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "plugin_id": {"type": "string"},
-                                    "plugin_name": {"type": "string"},
-                                    "command": {"type": "string"},
-                                    "description": {"type": "string"},
-                                    "type": {"type": "string"}
-                                }
-                            }
-                        },
-                        "timestamp": {"type": "integer"}
-                    }
-                }
-            },
-            {
-                "name": "execute_command",
-                "description": "执行MCDR命令或Minecraft服务器命令，并捕获真实的命令响应",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "command": {
-                            "type": "string",
-                            "description": "要执行的命令，支持MCDR命令(!!开头)或Minecraft命令(可带/前缀)"
-                        },
-                        "source_type": {
-                            "type": "string",
-                            "enum": ["console", "player"],
-                            "default": "console",
-                            "description": "命令来源类型"
-                        }
-                    },
-                    "required": ["command"]
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "command": {"type": "string"},
-                        "command_id": {"type": "string"},
-                        "output": {"type": "string"},
-                        "responses": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "timestamp": {"type": "integer"}
-                    }
-                }
-            },
-            {
-                "name": "get_server_status",
-                "description": "获取MCDR服务器状态信息",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "include_players": {
-                            "type": "boolean",
-                            "default": True,
-                            "description": "是否包含在线玩家信息"
-                        }
-                    }
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "timestamp": {"type": "integer"},
-                        "mcdr_status": {"type": "string"},
-                        "mcdr_status_detail": {"type": "string"},
-                        "server_running": {"type": "boolean"},
-                        "server_startup": {"type": "boolean"},
-                        "plugin_list_detail": {"type": "string"},
-                        "players": {
-                            "type": "object",
-                            "properties": {
-                                "list_command_result": {"type": "string"}
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                "name": "get_recent_logs",
-                "description": "获取最近的服务器日志（支持MCDR和Minecraft日志）",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "lines_count": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 50,
-                            "default": 20,
-                            "description": "要获取的日志行数，最大50行"
-                        }
-                    }
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "total_lines": {"type": "integer"},
-                        "requested_lines": {"type": "integer"},
-                        "returned_lines": {"type": "integer"},
-                        "logs": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "line_number": {"type": "integer"},
-                                    "content": {"type": "string"},
-                                    "timestamp": {"type": "string"},
-                                    "source": {"type": "string"},
-                                    "is_command": {"type": "boolean"}
-                                }
-                            }
-                        },
-                        "timestamp": {"type": "integer"}
-                    }
-                }
-            },
-            {
-                "name": "get_logs_range",
-                "description": "获取指定范围的服务器日志（支持MCDR和Minecraft日志）",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "start_line": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "default": 0,
-                            "description": "起始行号（从0开始）"
-                        },
-                        "end_line": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "description": "结束行号（不包含），最多获取50行"
-                        }
-                    },
-                    "required": ["end_line"]
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "total_lines": {"type": "integer"},
-                        "start_line": {"type": "integer"},
-                        "end_line": {"type": "integer"},
-                        "requested_lines": {"type": "integer"},
-                        "returned_lines": {"type": "integer"},
-                        "logs": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "line_number": {"type": "integer"},
-                                    "content": {"type": "string"},
-                                    "timestamp": {"type": "string"},
-                                    "source": {"type": "string"},
-                                    "is_command": {"type": "boolean"}
-                                }
-                            }
-                        },
-                        "timestamp": {"type": "integer"}
-                    }
-                }
-            },
-            {
-                "name": "search_logs",
-                "description": "搜索日志内容，支持文本搜索和正则表达式搜索",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "搜索查询字符串"
-                        },
-                        "use_regex": {
-                            "type": "boolean",
-                            "default": False,
-                            "description": "是否使用正则表达式搜索"
-                        },
-                        "context_lines": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 10,
-                            "default": 0,
-                            "description": "包含搜索结果的上下文行数"
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 5,
-                            "default": 5,
-                            "description": "最大返回结果数"
-                        }
-                    },
-                    "required": ["query"]
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "query": {"type": "string"},
-                        "use_regex": {"type": "boolean"},
-                        "context_lines": {"type": "integer"},
-                        "total_matches": {"type": "integer"},
-                        "returned_results": {"type": "integer"},
-                        "remaining_results": {"type": "integer"},
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "search_id": {"type": "integer"},
-                                    "line_number": {"type": "integer"},
-                                    "content": {"type": "string"},
-                                    "timestamp": {"type": "string"},
-                                    "is_command": {"type": "boolean"},
-                                    "context_before": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "line_number": {"type": "integer"},
-                                                "content": {"type": "string"}
-                                            }
-                                        }
-                                    },
-                                    "context_after": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "line_number": {"type": "integer"},
-                                                "content": {"type": "string"}
-                                            }
-                                        }
-                                    },
-                                    "match_index": {"type": "integer"}
-                                }
-                            }
-                        },
-                        "timestamp": {"type": "integer"}
-                    }
-                }
-            },
-            {
-                "name": "search_logs_by_ids",
-                "description": "根据搜索ID范围查询日志",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "start_id": {
-                            "type": "integer",
-                            "description": "起始搜索ID"
-                        },
-                        "end_id": {
-                            "type": "integer",
-                            "description": "结束搜索ID"
-                        },
-                        "context_lines": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 10,
-                            "default": 0,
-                            "description": "包含搜索结果的上下文行数"
-                        }
-                    },
-                    "required": ["start_id", "end_id"]
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "start_id": {"type": "integer"},
-                        "end_id": {"type": "integer"},
-                        "context_lines": {"type": "integer"},
-                        "total_matches": {"type": "integer"},
-                        "returned_results": {"type": "integer"},
-                        "remaining_results": {"type": "integer"},
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "search_id": {"type": "integer"},
-                                    "line_number": {"type": "integer"},
-                                    "content": {"type": "string"},
-                                    "timestamp": {"type": "string"},
-                                    "is_command": {"type": "boolean"},
-                                    "context_before": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "line_number": {"type": "integer"},
-                                                "content": {"type": "string"}
-                                            }
-                                        }
-                                    },
-                                    "context_after": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "line_number": {"type": "integer"},
-                                                "content": {"type": "string"}
-                                            }
-                                        }
-                                    },
-                                    "match_index": {"type": "integer"}
-                                }
-                            }
-                        },
-                        "timestamp": {"type": "integer"}
-                    }
-                }
-            }
-        ]
+        # 从工具定义文件获取基础工具列表
+        tools = get_mcp_tools()
         
-        # 获取MCDR自带命令并添加为工具
-        mcdr_command_tools = await self._get_mcdr_command_tools()
-        tools.extend(mcdr_command_tools)
+        # 获取所有命令并添加为工具
+        command_tools = await self._get_all_command_tools()
+        tools.extend(command_tools)
         
         return {
             "jsonrpc": "2.0",
@@ -587,138 +153,171 @@ class MCPServer:
             }
         }
     
-    async def _get_mcdr_command_tools(self) -> List[Dict[str, Any]]:
-        """获取MCDR自带命令并将它们转换为MCP工具"""
-        # 检查是否启用MCDR命令工具
-        if not self.config.get("features", {}).get("mcdr_command_tools", True):
-            self.logger.info("MCDR命令工具功能已禁用")
+    async def _get_all_command_tools(self) -> List[Dict[str, Any]]:
+        """获取所有命令并将它们转换为MCP工具"""
+        # 检查是否启用命令工具功能
+        if not self.config.get("features", {}).get("command_tools", True):
+            self.logger.info("命令工具功能已禁用")
             return []
             
-        mcdr_tools = []
-        
         try:
-            # 获取MCDR命令树
-            self.logger.debug("正在获取MCDR命令树...")
-            mcdr_commands = await self.command_handler.get_command_tree({"plugin_id": "mcdr"})
+            # 获取所有命令树
+            self.logger.debug("正在获取所有命令树...")
+            all_commands = await self.command_handler.get_command_tree({})
+            
+            # 按命令前缀分组
+            command_groups = {}
             
             # 如果获取成功，处理命令
-            if mcdr_commands.get("success", False):
-                self.logger.debug(f"成功获取MCDR命令树，共 {len(mcdr_commands.get('commands', []))} 个命令")
-                for cmd in mcdr_commands.get("commands", []):
+            if all_commands.get("success", False):
+                self.logger.debug(f"成功获取命令树，共 {len(all_commands.get('commands', []))} 个命令")
+                
+                # 处理所有命令
+                for cmd in all_commands.get("commands", []):
                     try:
                         command = cmd.get("command", "")
-                        # 只处理以!!MCDR开头的命令
-                        if command.startswith("!!MCDR "):
-                            description = cmd.get("description", "MCDR命令")
+                        description = cmd.get("description", "命令")
+                        plugin_id = cmd.get("plugin_id", "unknown")
+                        
+                        # 提取命令前缀（第一个部分）
+                        parts = command.split()
+                        if len(parts) >= 1:
+                            prefix = parts[0]  # 第一个部分作为前缀
                             
-                            # 创建工具名称
-                            tool_name = f"mcdr_{self._command_to_tool_name(command)}"
-                            self.logger.debug(f"处理MCDR命令: {command} -> 工具名称: {tool_name}")
-                            
-                            # 创建一个工具
-                            tool = {
-                                "name": tool_name,
-                                "description": f"{description} (MCDR自带命令)",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {}
-                                },
-                                "outputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "success": {"type": "boolean"},
-                                        "command": {"type": "string"},
-                                        "output": {"type": "string"},
-                                        "timestamp": {"type": "integer"}
-                                    }
-                                },
-                                "metadata": {
-                                    "mcdr_command": command
+                            # 按前缀分组
+                            if prefix not in command_groups:
+                                command_groups[prefix] = {
+                                    'commands': [],
+                                    'descriptions': [],
+                                    'subcommands': set()
                                 }
-                            }
                             
-                            # 添加到工具列表
-                            mcdr_tools.append(tool)
-                            self.logger.debug(f"添加MCDR命令工具: {tool_name}")
+                            # 添加到对应分组
+                            command_groups[prefix]['commands'].append(command)
+                            
+                            # 构建描述 - 只显示子命令部分，避免重复前缀
+                            if len(parts) >= 2:
+                                # 有子命令，显示子命令部分
+                                subcommand_part = " ".join(parts[1:])  # 移除前缀，保留其余部分
+                                command_groups[prefix]['descriptions'].append(f"{subcommand_part} - {description}")
+                            else:
+                                # 没有子命令，只显示前缀
+                                command_groups[prefix]['descriptions'].append(f"{prefix} - {description}")
+                            
+                            # 提取子命令（除前缀外的所有部分）
+                            if len(parts) >= 2:
+                                # 提取除前缀外的所有部分作为子命令
+                                subcommand_parts = parts[1:]
+                                subcommand = " ".join(subcommand_parts)
+                                command_groups[prefix]['subcommands'].add(subcommand)
+                            else:
+                                # 如果没有子命令，使用前缀本身作为子命令
+                                command_groups[prefix]['subcommands'].add(prefix)
+                            
+                            self.logger.debug(f"收集命令: {command} (插件: {plugin_id})")
                     except Exception as e:
-                        self.logger.error(f"处理MCDR命令时出错: {e}")
-            else:
-                error = mcdr_commands.get("error", "未知错误")
-                self.logger.error(f"获取MCDR命令树失败: {error}")
-                
-                # 如果主要方法失败，使用备用方法
-                self.logger.debug("使用备用方法获取MCDR命令")
-                mcdr_tools = self._get_default_mcdr_commands()
+                        self.logger.error(f"处理命令时出错: {e}")
             
-            # 如果没有找到任何命令，使用备用方法
-            if not mcdr_tools:
-                self.logger.debug("未找到MCDR命令，使用备用方法")
-                mcdr_tools = self._get_default_mcdr_commands()
+            # 为每个命令前缀创建工具
+            tools = []
+            for prefix, group_data in command_groups.items():
+                if group_data['commands']:
+                    # 构建工具描述
+                    full_description = f"{prefix}命令执行工具，以下是支持的指令：\n"
+                    full_description += "\n".join(group_data['descriptions'])
+                    full_description += "\n\n参数说明："
+                    full_description += "\n- subcommand: 选择要执行的子命令"
+                    full_description += "\n- args: 命令参数"
+                    
+                    # 创建工具定义
+                    tool = self._create_command_tool_definition(
+                        prefix=prefix,
+                        subcommands=list(group_data['subcommands']),
+                        description=full_description
+                    )
+                    
+                    tools.append(tool)
+                    self.logger.debug(f"已创建 {prefix} 命令工具，包含 {len(group_data['subcommands'])} 个子命令")
             
-            self.logger.debug(f"已动态添加 {len(mcdr_tools)} 个MCDR命令工具")
-            return mcdr_tools
+            # 缓存工具信息以便后续使用
+            self._command_tools_cache = tools
+            
+            if not tools:
+                self.logger.warning("未找到任何命令")
+                # 使用默认MCDR命令作为备用
+                return self._get_default_mcdr_commands()
+            
+            return tools
             
         except Exception as e:
-            self.logger.error(f"获取MCDR命令工具失败: {e}", exc_info=True)
+            self.logger.error(f"获取命令工具失败: {e}", exc_info=True)
             # 使用备用方法
-            self.logger.debug("使用备用方法获取MCDR命令")
+            self.logger.debug("使用备用方法获取命令")
             return self._get_default_mcdr_commands()
+    
+    def _create_command_tool_definition(self, prefix: str, subcommands: List[str], description: str) -> Dict[str, Any]:
+        """创建通用命令工具定义"""
+        # 构建输入模式
+        input_properties = {}
+        
+        if subcommands:
+            # 如果有子命令列表，提供选择
+            input_properties["subcommand"] = {
+                "type": "string",
+                "enum": subcommands,
+                "description": f"可用的{prefix}子命令"
+            }
+        
+        # 添加通用参数
+        input_properties["args"] = {
+            "type": "string",
+            "description": "命令参数（可选）",
+            "default": ""
+        }
+        
+        return {
+            "name": self._generate_tool_name(prefix),
+            "description": description,
+            "inputSchema": {
+                "type": "object",
+                "properties": input_properties
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "success": {"type": "boolean"},
+                    "command": {"type": "string"},
+                    "output": {"type": "string"},
+                    "timestamp": {"type": "integer"}
+                }
+            },
+            "metadata": {
+                "command_prefix": prefix,
+                "command_subcommands": subcommands or []
+            }
+        }
+    
+    def _generate_tool_name(self, prefix: str) -> str:
+        """生成工具名称"""
+        # 移除特殊字符并转换为小写
+        clean_prefix = prefix.lower()
+        clean_prefix = clean_prefix.replace('!!', '').replace('!', '').replace(' ', '_')
+        
+        # 处理特殊情况
+        if clean_prefix == 'mcdr':
+            return 'command_mcdr'
+        elif clean_prefix.startswith('mcdr'):
+            return f'command_{clean_prefix}'
+        else:
+            return f'command_{clean_prefix}'
     
     def _get_default_mcdr_commands(self) -> List[Dict[str, Any]]:
         """获取默认的MCDR命令工具列表"""
-        default_commands = [
-            {"command": "!!MCDR status", "description": "查看MCDR状态"},
-            {"command": "!!MCDR help", "description": "显示MCDR帮助"},
-            {"command": "!!MCDR plugin list", "description": "列出所有插件"},
-            {"command": "!!MCDR reload plugin", "description": "重载指定插件"},
-            {"command": "!!MCDR reload config", "description": "重载配置文件"},
-            {"command": "!!MCDR permission list", "description": "列出权限等级"}
-        ]
-        
-        mcdr_tools = []
-        for cmd in default_commands:
-            command = cmd["command"]
-            description = cmd["description"]
-            tool_name = f"mcdr_{self._command_to_tool_name(command)}"
-            
-            tool = {
-                "name": tool_name,
-                "description": f"{description} (MCDR自带命令)",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {}
-                },
-                "outputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"},
-                        "command": {"type": "string"},
-                        "output": {"type": "string"},
-                        "timestamp": {"type": "integer"}
-                    }
-                },
-                "metadata": {
-                    "mcdr_command": command
-                }
-            }
-            
-            mcdr_tools.append(tool)
-            
+        mcdr_tools = get_default_mcdr_tools()
         self.logger.info(f"已创建 {len(mcdr_tools)} 个默认MCDR命令工具")
         return mcdr_tools
     
-    def _command_to_tool_name(self, command: str) -> str:
-        """将MCDR命令转换为工具名称"""
-        # 移除!!MCDR前缀
-        name = command.replace("!!MCDR ", "")
-        # 替换空格为下划线
-        name = name.replace(" ", "_")
-        # 移除特殊字符
-        name = re.sub(r'[^\w_]', '', name)
-        # 确保名称不为空
-        if not name:
-            name = "command"
-        return name
+
         
     async def _handle_tools_call(self, request_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """处理tools/call请求"""
@@ -739,9 +338,9 @@ class MCPServer:
             result = await self.command_handler.search_logs(arguments)
         elif tool_name == "search_logs_by_ids":
             result = await self.command_handler.search_logs_by_ids(arguments)
-        elif tool_name.startswith("mcdr_"):
-            # 处理动态MCDR命令工具
-            result = await self._handle_mcdr_command_tool(tool_name, arguments)
+        elif tool_name.startswith("command_"):
+            # 处理通用命令工具
+            result = await self._handle_generic_command_tool(tool_name, arguments)
         else:
             return self._create_error_response(
                 request_id, -32601, "Unknown tool", f"Tool '{tool_name}' not found"
@@ -760,83 +359,61 @@ class MCPServer:
             }
         }
     
-    async def _handle_mcdr_command_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """处理动态MCDR命令工具调用"""
+    async def _handle_generic_command_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """处理通用命令工具调用"""
         try:
-            self.logger.info(f"处理MCDR命令工具: {tool_name}")
+            self.logger.info(f"处理通用命令工具: {tool_name}")
             
-            # 尝试从工具名称中提取命令
-            command_to_execute = None
+            # 从工具名称中提取命令前缀
+            # tool_name 格式: command_mcdr, command_plugin, 等
+            prefix_part = tool_name.replace("command_", "")
             
-            # 1. 首先检查是否有缓存的命令映射
-            if hasattr(self, '_mcdr_command_mapping') and tool_name in self._mcdr_command_mapping:
-                command_to_execute = self._mcdr_command_mapping[tool_name]
-                self.logger.debug(f"从缓存中找到命令: {command_to_execute}")
+            # 从参数中获取子命令和参数
+            subcommand = arguments.get("subcommand", "")
+            args = arguments.get("args", "")
             
-            # 2. 如果没有缓存，尝试从MCDR命令树中查找
-            if not command_to_execute:
-                # 获取MCDR命令树以找到对应的命令
-                mcdr_commands = await self.command_handler.get_command_tree({"plugin_id": "mcdr"})
-                
-                # 创建命令映射缓存（如果不存在）
-                if not hasattr(self, '_mcdr_command_mapping'):
-                    self._mcdr_command_mapping = {}
-                
-                # 查找匹配的命令
-                for cmd in mcdr_commands.get("commands", []):
-                    if cmd.get("command", "").startswith("!!MCDR "):
-                        command = cmd.get("command")
-                        mapped_tool_name = f"mcdr_{self._command_to_tool_name(command)}"
-                        
-                        # 添加到缓存
-                        self._mcdr_command_mapping[mapped_tool_name] = command
-                        
-                        if tool_name == mapped_tool_name:
-                            command_to_execute = command
-                            self.logger.debug(f"从命令树中找到命令: {command_to_execute}")
-                            break
+            # 从缓存中获取原始前缀
+            original_prefix = None
+            if hasattr(self, '_command_tools_cache'):
+                for tool in self._command_tools_cache:
+                    if tool.get('name') == tool_name:
+                        original_prefix = tool.get('metadata', {}).get('command_prefix')
+                        break
             
-            # 3. 如果仍然没有找到，尝试从工具名称反向推导命令
-            if not command_to_execute:
-                # 移除前缀"mcdr_"
-                if tool_name.startswith("mcdr_"):
-                    command_part = tool_name[5:]
-                    # 将下划线替换回空格
-                    command_part = command_part.replace("_", " ")
-                    # 添加MCDR前缀
-                    command_to_execute = f"!!MCDR {command_part}"
-                    self.logger.debug(f"从工具名称推导命令: {command_to_execute}")
-            
-            # 如果找到命令，执行它
-            if command_to_execute:
-                self.logger.info(f"执行MCDR命令: {command_to_execute}")
-                result = await self.command_handler.execute_command({"command": command_to_execute})
-                
-                # 检查是否为"未知命令"情况
-                output = result.get("output", "")
-                if output and ("未知命令" in output or "Unknown command" in output):
-                    # 如果是工具调用，我们可以提供更友好的错误信息
-                    self.logger.info(f"工具 {tool_name} 执行的命令 {command_to_execute} 返回未知命令")
-                    
-                    # 尝试获取更多信息
-                    if "responses" in result:
-                        responses = result["responses"]
-                        if "当前命令没有返回值，以下是它的子命令" not in output:
-                            # 如果没有子命令信息，添加一个友好的提示
-                            responses.append(f"工具 {tool_name} 可能需要更多参数，请尝试使用 !!MCDR help 获取帮助")
-                            result["output"] = "\n".join(responses)
-                
-                return result
+            # 构建完整的命令
+            if original_prefix:
+                command_to_execute = f"{original_prefix} {subcommand}"
             else:
-                self.logger.error(f"找不到与工具 {tool_name} 对应的MCDR命令")
-                return {
-                    "success": False,
-                    "error": f"找不到与工具 {tool_name} 对应的MCDR命令",
-                    "output": ""
-                }
+                # 备用方案：尝试重建前缀
+                if prefix_part == "mcdr":
+                    command_to_execute = f"!!MCDR {subcommand}"
+                elif prefix_part.startswith("!"):
+                    command_to_execute = f"{prefix_part} {subcommand}"
+                else:
+                    command_to_execute = f"!!{prefix_part.upper()} {subcommand}"
+            
+            if args:
+                command_to_execute += f" {args}"
+            
+            self.logger.info(f"执行命令: {command_to_execute}")
+            result = await self.command_handler.execute_command({"command": command_to_execute})
+            
+            # 检查是否为"未知命令"情况
+            output = result.get("output", "")
+            if output and ("未知命令" in output or "Unknown command" in output):
+                self.logger.info(f"工具 {tool_name} 执行的命令 {command_to_execute} 返回未知命令")
+                
+                # 尝试获取更多信息
+                if "responses" in result:
+                    responses = result["responses"]
+                    if "当前命令没有返回值，以下是它的子命令" not in output:
+                        responses.append(f"工具 {tool_name} 可能需要更多参数，请尝试使用 help 命令获取帮助")
+                        result["output"] = "\n".join(responses)
+            
+            return result
                 
         except Exception as e:
-            self.logger.error(f"执行MCDR命令工具失败: {e}", exc_info=True)
+            self.logger.error(f"执行通用命令工具失败: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
